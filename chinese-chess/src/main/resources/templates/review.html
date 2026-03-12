@@ -218,6 +218,28 @@
             
             <!-- 右侧：分析面板 -->
             <div class="col-lg-4">
+                <!-- 走法列表 -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <ul class="nav nav-tabs" role="tablist">
+                            <li class="nav-item">
+                                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#moves">📜 走法</button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#analysis">🔍 详情</button>
+                            </li>
+                        </ul>
+                        <div class="tab-content">
+                            <div class="tab-pane fade show active" id="moves">
+                                <div id="moveList" style="max-height: 400px; overflow-y: auto;"></div>
+                            </div>
+                            <div class="tab-pane fade" id="analysis">
+                                <div id="moveDetail"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- 统计概览 -->
                 <div class="card mb-3">
                     <div class="card-body">
@@ -243,33 +265,11 @@
                 </div>
                 
                 <!-- 建议走法 -->
-                <div class="card mb-3">
+                <div class="card">
                     <div class="card-body">
                         <h5>💡 当前建议</h5>
                         <div id="suggestions">
                             <small class="text-muted">点击"上一步"查看当前局面的建议走法</small>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- 走法列表 -->
-                <div class="card">
-                    <div class="card-body">
-                        <ul class="nav nav-tabs" role="tablist">
-                            <li class="nav-item">
-                                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#moves">📜 走法</button>
-                            </li>
-                            <li class="nav-item">
-                                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#analysis">🔍 详情</button>
-                            </li>
-                        </ul>
-                        <div class="tab-content">
-                            <div class="tab-pane fade show active" id="moves">
-                                <div id="moveList" style="max-height: 400px; overflow-y: auto;"></div>
-                            </div>
-                            <div class="tab-pane fade" id="analysis">
-                                <div id="moveDetail"></div>
-                            </div>
                         </div>
                     </div>
                 </div>

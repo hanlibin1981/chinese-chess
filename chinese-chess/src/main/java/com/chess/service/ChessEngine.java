@@ -77,9 +77,20 @@ public class ChessEngine {
                 if (b[i][j] != null && isRed[i][j] == color.equals("red")) {
                     List<Move> pieceMoves = getValidMovesForPiece(board, i, j, b[i][j]);
                     for (Move move : pieceMoves) {
-                        if (!wouldFaceKing(board, move)) {
-                            moves.add(move);
+                        // 模拟走棋后检查是否合法
+                        ChessBoard testBoard = makeMoveWithoutRecording(board, move);
+                        
+                        // 检查1: 是否会导致将对将
+                        if (isKingsFacing(testBoard)) {
+                            continue;
                         }
+                        
+                        // 检查2: 走棋后自己的王是否被将军（非法走法）
+                        if (isKingInCheck(testBoard, color)) {
+                            continue;
+                        }
+                        
+                        moves.add(move);
                     }
                 }
             }
@@ -87,34 +98,135 @@ public class ChessEngine {
         return moves;
     }
     
+    /**
+     * 检查两个将帅是否在同一列且无遮挡面对面
+     */
+    private boolean isKingsFacing(ChessBoard board) {
+        String[][] b = board.getBoard();
+        boolean[][] isRed = board.getIsRed();
+        
+        int redKingX = -1, redKingY = -1;
+        int blackKingX = -1, blackKingY = -1;
+        
+        // 找到将帅位置
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (b[i][j] != null) {
+                    if (b[i][j].equals("帥") && isRed[i][j]) {
+                        redKingX = i; redKingY = j;
+                    } else if (b[i][j].equals("將") && !isRed[i][j]) {
+                        blackKingX = i; blackKingY = j;
+                    }
+                }
+            }
+        }
+        
+        // 如果任一将帅不存在，返回false
+        if (redKingX < 0 || blackKingX < 0) {
+            return false;
+        }
+        
+        // 检查是否在同一列
+        if (redKingY != blackKingY) {
+            return false;
+        }
+        
+        // 检查中间是否有遮挡
+        int minX = Math.min(redKingX, blackKingX);
+        int maxX = Math.max(redKingX, blackKingX);
+        
+        for (int x = minX + 1; x < maxX; x++) {
+            if (b[x][redKingY] != null) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * 模拟走棋但不记录到历史（用于检测走棋后是否合法）
+     */
+    private ChessBoard makeMoveWithoutRecording(ChessBoard board, Move move) {
+        ChessBoard newBoard = board.copy();
+        String[][] b = newBoard.getBoard();
+        boolean[][] isRed = newBoard.getIsRed();
+        
+        String piece = b[move.getFromX()][move.getFromY()];
+        boolean pieceIsRed = isRed[move.getFromX()][move.getFromY()];
+        
+        b[move.getFromX()][move.getFromY()] = null;
+        isRed[move.getFromX()][move.getFromY()] = false;
+        
+        b[move.getToX()][move.getToY()] = piece;
+        isRed[move.getToX()][move.getToY()] = pieceIsRed;
+        
+        return newBoard;
+    }
+    
+    /**
+     * 检查走法是否会导致将对将（将帅对面）
+     * 需要检查：
+     * 1. 如果是王移动，检查移动后是否与对方王对面
+     * 2. 如果是其他棋子移动，检查是否露出了对方面前的直线导致将帅对面
+     */
     private boolean wouldFaceKing(ChessBoard board, Move move) {
         String[][] b = board.getBoard();
         boolean[][] isRed = board.getIsRed();
         
         String piece = b[move.getFromX()][move.getFromY()];
-        if (!piece.equals("帥") && !piece.equals("將")) {
-            return false;
-        }
+        boolean isKing = piece.equals("帥") || piece.equals("將");
         
-        int kingY = move.getToY();
-        int kingX = move.getToX();
-        boolean kingIsRed = isRed[move.getFromX()][move.getFromY()];
+        // 模拟移动后的棋盘
+        ChessBoard tempBoard = board.copy();
+        String tempPiece = tempBoard.getBoard()[move.getFromX()][move.getFromY()];
+        boolean tempIsRed = tempBoard.getIsRed()[move.getFromX()][move.getFromY()];
         
-        int otherKingStartX = kingIsRed ? 0 : 7;
-        int otherKingEndX = kingIsRed ? 2 : 9;
+        // 执行移动
+        tempBoard.getBoard()[move.getFromX()][move.getFromY()] = null;
+        tempBoard.getIsRed()[move.getFromX()][move.getFromY()] = false;
+        tempBoard.getBoard()[move.getToX()][move.getToY()] = tempPiece;
+        tempBoard.getIsRed()[move.getToX()][move.getToY()] = tempIsRed;
         
-        for (int x = otherKingStartX; x <= otherKingEndX; x++) {
-            if (b[x][kingY] != null) {
-                if ((kingIsRed && b[x][kingY].equals("將")) || (!kingIsRed && b[x][kingY].equals("帥"))) {
-                    for (int kx = Math.min(kingX, x) + 1; kx < Math.max(kingX, x); kx++) {
-                        if (b[kx][kingY] != null) {
-                            return false;
-                        }
+        // 找到红方和黑方的帅/将
+        int redKingX = -1, redKingY = -1;
+        int blackKingX = -1, blackKingY = -1;
+        
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (tempBoard.getBoard()[i][j] != null) {
+                    if (tempBoard.getBoard()[i][j].equals("帥") && tempBoard.getIsRed()[i][j]) {
+                        redKingX = i;
+                        redKingY = j;
+                    } else if (tempBoard.getBoard()[i][j].equals("將") && !tempBoard.getIsRed()[i][j]) {
+                        blackKingX = i;
+                        blackKingY = j;
                     }
-                    return true;
                 }
             }
         }
+        
+        // 如果任一王不存在，返回false（异常情况）
+        if (redKingX < 0 || blackKingX < 0) {
+            return false;
+        }
+        
+        // 检查是否在同一列且之间无遮挡
+        if (redKingY == blackKingY) {
+            int minX = Math.min(redKingX, blackKingX);
+            int maxX = Math.max(redKingX, blackKingX);
+            boolean blocked = false;
+            for (int x = minX + 1; x < maxX; x++) {
+                if (tempBoard.getBoard()[x][redKingY] != null) {
+                    blocked = true;
+                    break;
+                }
+            }
+            if (!blocked) {
+                return true; // 将对将
+            }
+        }
+        
         return false;
     }
     
@@ -250,6 +362,10 @@ public class ChessEngine {
         for (int i = 0; i < dirs.length; i++) {
             int nx = x + dirs[i][0], ny = y + dirs[i][1];
             int bx = x + blocks[i][0], by = y + blocks[i][1];
+            // 检查阻挡点是否在棋盘内
+            if (bx < 0 || bx >= 10 || by < 0 || by >= 9) {
+                continue;
+            }
             boolean validRow = isRed ? (nx >= 5 && nx <= 9) : (nx >= 0 && nx <= 4);
             if (validRow && ny >= 0 && ny < 9 && b[bx][by] == null) {
                 if (b[nx][ny] == null || !isSameSide(board, x, y, nx, ny)) {

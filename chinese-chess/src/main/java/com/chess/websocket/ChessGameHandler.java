@@ -61,8 +61,15 @@ public class ChessGameHandler {
     
     @MessageMapping("/game/join")
     public void joinGame(Map<String, Object> data) {
-        Long gameId = Long.parseLong(data.get("gameId").toString());
-        Long userId = Long.parseLong(data.get("userId").toString());
+        Object gameIdObj = data.get("gameId");
+        Object userIdObj = data.get("userId");
+        
+        if (gameIdObj == null || userIdObj == null) {
+            return;
+        }
+        
+        Long gameId = Long.parseLong(gameIdObj.toString());
+        Long userId = Long.parseLong(userIdObj.toString());
         
         Game game = gameService.findById(gameId);
         if (game == null) return;
@@ -87,6 +94,13 @@ public class ChessGameHandler {
     
     @MessageMapping("/game/move")
     public void makeMove(Map<String, Object> data) throws Exception {
+        // 检查必要参数
+        if (data.get("gameId") == null || data.get("userId") == null ||
+            data.get("fromX") == null || data.get("fromY") == null ||
+            data.get("toX") == null || data.get("toY") == null) {
+            return;
+        }
+        
         Long gameId = Long.parseLong(data.get("gameId").toString());
         Long userId = Long.parseLong(data.get("userId").toString());
         int fromX = Integer.parseInt(data.get("fromX").toString());
@@ -156,23 +170,27 @@ public class ChessGameHandler {
         String opponentColor = color.equals("red") ? "black" : "red";
         boolean isCheckmate = isGameOver(state.board, opponentColor);
         
-        if (isCheckmate) {
-            state.status = "finished";
-            game.setStatus("finished");
-            game.setWinner(color);  // 当前走棋方获胜
-            messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
-                    "type", "checkmate",
-                    "winner", game.getWinner()
-            ));
-        } else if (chessEngine.isKingInCheck(state.board, opponentColor)) {
-            // 如果被将军但没有被将死，发送将军消息
+        // 先检查是否被将军（在任何结束判定之前）
+        if (chessEngine.isKingInCheck(state.board, opponentColor) && !isCheckmate) {
             messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
                     "type", "check",
                     "color", opponentColor
             ));
         }
         
-        gameService.saveGame(game);
+        if (isCheckmate) {
+            state.status = "finished";
+            game.setStatus("finished");
+            game.setWinner(color);  // 当前走棋方获胜
+            gameService.saveGame(game);
+            updateUserStats(game);
+            messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+                    "type", "checkmate",
+                    "winner", color,
+                    "message", color.equals("red") ? "红方获胜！" : "黑方获胜！"
+            ));
+            return;
+        }
         
         // 广播走法
         messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
@@ -204,18 +222,30 @@ public class ChessGameHandler {
             Game game = gameService.findById(gameId);
             game.setPgn(gameService.boardToPgn(state.board));
             
-            if (isGameOver(state.board, "black")) {
-                state.status = "finished";
-                game.setStatus("finished");
-                game.setWinner("black");
+            // 先检查是否被将军
+            if (chessEngine.isKingInCheck(state.board, "red")) {
                 messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
-                        "type", "gameOver",
-                        "winner", "black"
+                        "type", "check",
+                        "color", "red"
                 ));
             }
             
+            // 检查是否将死（玩家无子可动）
+            if (isGameOver(state.board, "red")) {
+                state.status = "finished";
+                game.setStatus("finished");
+                game.setWinner("black");
+                gameService.saveGame(game);
+                updateUserStats(game);
+                messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+                        "type", "checkmate",
+                        "winner", "black",
+                        "message", "将死！你输了"
+                ));
+                return;
+            }
+            
             gameService.saveGame(game);
-            updateUserStats(game);
             
             messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
                     "type", "move",
@@ -418,8 +448,10 @@ public class ChessGameHandler {
     }
     
     private boolean isGameOver(ChessBoard board, String color) {
+        // 必须同时满足：被将军 且 无子可走 = 将死
+        boolean isCheck = chessEngine.isKingInCheck(board, color);
         var moves = chessEngine.getAllValidMoves(board, color);
-        return moves.isEmpty();
+        return isCheck && moves.isEmpty();
     }
     
     private boolean containsPiece(ChessBoard board, String piece) {
