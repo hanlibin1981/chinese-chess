@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国象棋 - 首页</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; }
+        .navbar { background: rgba(0,0,0,0.3) !important; backdrop-filter: blur(10px); }
+        .card { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(10px); }
+        .card-body { color: #fff; }
+        .btn-primary { background: #e94560; border: none; }
+        .btn-primary:hover { background: #ff6b6b; }
+        .game-item { transition: transform 0.2s; }
+        .game-item:hover { transform: translateY(-3px); }
+        .status-playing { color: #4ade80; }
+        .status-waiting { color: #fbbf24; }
+        .alert { text-align: center; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">🎮 中国象棋</a>
+            <div class="navbar-nav ms-auto">
+                <th:block th:if="${user}">
+                    <span class="nav-item nav-link" th:text="${user.username}"></span>
+                    <a class="nav-item nav-link" href="/games">我的棋谱</a>
+                    <a class="nav-item nav-link" href="/logout">退出</a>
+                </th:block>
+                <th:block th:unless="${user}">
+                    <a class="nav-item nav-link" href="/login">登录</a>
+                    <a class="nav-item nav-link" href="/register">注册</a>
+                </th:block>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <th:block th:if="${user}">
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h4 class="card-title">🎯 开始新对局</h4>
+                            <div class="d-grid gap-2 mt-3">
+                                <button class="btn btn-primary btn-lg" onclick="createGame(false)">
+                                    👥 人人对战
+                                </button>
+                                <button class="btn btn-outline-light btn-lg" onclick="createGame(true)">
+                                    🤖 人机对战
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-body">
+                            <h4 class="card-title">📊 用户统计</h4>
+                            <p>
+                                <span th:text="${user.username}"></span>，欢迎回来！<br>
+                                胜: <span th:text="${user.winCount}">0</span> | 
+                                负: <span th:text="${user.loseCount}">0</span> | 
+                                和: <span th:text="${user.drawCount}">0</span>
+                            </p>
+                        </div>
+                    </div>
+                </th:block>
+                
+                <th:block th:unless="${user}">
+                    <div class="card">
+                        <div class="card-body">
+                            <h4 class="card-title text-center mb-4">🎮 中国象棋</h4>
+                            <form method="post" action="/login">
+                                <div class="mb-3">
+                                    <label class="form-label" style="color: #fff;">用户名</label>
+                                    <input type="text" name="username" class="form-control" value="hlb" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" style="color: #fff;">密码</label>
+                                    <input type="password" name="password" class="form-control" value="123456" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">登录</button>
+                            </form>
+                            <div class="text-center mt-3">
+                                <a href="/register" style="color: rgba(255,255,255,0.7);">还没有账号？立即注册</a>
+                            </div>
+                        </div>
+                    </div>
+                </th:block>
+            </div>
+            
+            <div class="col-md-6" th:if="${activeGames} and not ${activeGames.empty}">
+                <div class="card">
+                    <div class="card-body">
+                        <h4 class="card-title">🔥 正在进行</h4>
+                        <div id="activeGames">
+                            <div th:each="game : ${activeGames}" class="card game-item mb-2" 
+                                 style="background: rgba(255,255,255,0.05);">
+                                <div class="card-body py-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong th:text="${game.redUsername}">红方</strong> 
+                                            <span class="text-muted">vs</span>
+                                            <strong th:text="${game.isAi} ? 'AI' : ${game.blackUsername}">黑方</strong>
+                                        </div>
+                                        <a th:href="@{/game/{id}(id=${game.id})}" 
+                                           class="btn btn-sm btn-outline-light">
+                                            观战
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script th:inline="javascript">
+        var isLoggedIn = [[${user != null}]];
+        
+        function createGame(isAi) {
+            if (!isLoggedIn) {
+                alert('请先登录');
+                window.location.href = '/login';
+                return;
+            }
+            
+            fetch('/game/create?isAi=' + isAi, {
+                method: 'POST'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/game/' + data.gameId;
+                } else {
+                    alert(data.message || '创建失败');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('请求失败，请重试');
+            });
+        }
+    </script>
+</body>
+</html>

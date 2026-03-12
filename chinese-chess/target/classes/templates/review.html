@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>复盘分析 - 中国象棋</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; }
+        .navbar { background: rgba(0,0,0,0.3) !important; }
+        .card { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); }
+        .card-body { color: #fff; }
+        
+        .chess-board { 
+            width: 560px; 
+            height: 620px; 
+            background: #deb887; 
+            border: 3px solid #8b4513;
+            position: relative;
+            margin: 0 auto;
+            overflow: visible;
+        }
+        .chess-cell {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .chess-piece {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 20px;
+            user-select: none;
+            box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            cursor: pointer;
+            position: relative;
+            z-index: 10;
+        }
+        .piece-red { background: linear-gradient(145deg, #ff6b6b, #c0392b); color: #fff; border: 2px solid #8b0000; }
+        .piece-black { background: linear-gradient(145deg, #2c3e50, #1a252f); color: #fff; border: 2px solid #000; }
+        .piece-selected { box-shadow: 0 0 15px #ffd700 !important; transform: scale(1.1); }
+        .piece-suggested { animation: pulse 1s infinite; }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 5px #00ff00; }
+            50% { box-shadow: 0 0 20px #00ff00; }
+            100% { box-shadow: 0 0 5px #00ff00; }
+        }
+        
+        .river {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 540px;
+            height: 60px;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #8b4513;
+            font-weight: bold;
+            z-index: 1;
+        }
+        
+        .board-line { position: absolute; background: #8b4513; z-index: 1; }
+        .line-horizontal { height: 3px; width: 539px; }
+        .line-vertical { width: 3px; }
+        .palace-line { position: absolute; width: 2px; background: #8b4513; }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .move-item {
+            padding: 5px 10px;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.2);
+            margin: 2px;
+            display: inline-block;
+            font-size: 12px;
+        }
+        .move-item:hover { background: rgba(255,255,255,0.1); }
+        .move-item.active { background: #e94560; border-color: #e94560; }
+        
+        .quality-excellent { color: #00ff00; border-color: #00ff00 !important; }
+        .quality-good { color: #7fff00; border-color: #7fff00 !important; }
+        .quality-acceptable { color: #ffff00; border-color: #ffff00 !important; }
+        .quality-equal { color: #ccc; }
+        .quality-mistake { color: #ff6600; border-color: #ff6600 !important; }
+        .quality-blunder { color: #ff0000; border-color: #ff0000 !important; font-weight: bold; }
+        .key-moment { background: rgba(255,215,0,0.3) !important; border-color: #ffd700 !important; }
+        
+        .tab-content { padding: 15px 0; }
+        
+        .score-indicator {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .score-red { background: rgba(255,0,0,0.3); }
+        .score-black { background: rgba(0,0,255,0.3); }
+        .score-equal { background: rgba(128,128,128,0.3); }
+        
+        .suggestion-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: rgba(255,255,255,0.05);
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .suggestion-item:hover { background: rgba(255,255,255,0.15); }
+        
+        .ai-analysis {
+            background: rgba(0,100,255,0.1);
+            border: 1px solid rgba(0,100,255,0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        
+        .stats-card {
+            text-align: center;
+            padding: 10px;
+            margin: 5px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .btn-export { background: #28a745; border: none; }
+        .btn-export:hover { background: #218838; }
+        
+        .nav-tabs .nav-link { color: #aaa; }
+        .nav-tabs .nav-link.active { background: transparent; color: #fff; border-color: #fff; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">🎮 中国象棋</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-item nav-link" href="/">大厅</a>
+                <a class="nav-item nav-link" href="/games">棋谱库</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- 游戏信息 -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center flex-wrap">
+                    <div>
+                        <span class="text-muted">红方:</span> 
+                        <strong th:text="${game.redUsername}">--</strong>
+                        <span th:if="${game.isAi}" class="badge bg-info ms-1">AI</span>
+                    </div>
+                    <h4>📊 复盘分析</h4>
+                    <div>
+                        <span class="text-muted">黑方:</span> 
+                        <strong th:text="${game.isAi ? 'AI' : game.blackUsername}">--</strong>
+                    </div>
+                    <button class="btn btn-export btn-sm" onclick="exportPGN()">💾 导出棋谱</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- 左侧：棋盘 -->
+            <div class="col-lg-8">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <!-- 当前局面评分 -->
+                        <div id="currentScore" class="score-indicator score-equal">
+                            等待分析...
+                        </div>
+                        
+                        <div class="chess-board" id="board"></div>
+                        
+                        <div class="controls">
+                            <button class="btn btn-secondary btn-sm" onclick="goToStart()">⏮ 首步</button>
+                            <button class="btn btn-outline-light btn-sm" onclick="prevMove()">◀ 上一步</button>
+                            <button class="btn btn-outline-light btn-sm" onclick="nextMove()">下一步 ▶</button>
+                            <button class="btn btn-secondary btn-sm" onclick="goToEnd()">⏭ 末步</button>
+                            <button class="btn btn-outline-info btn-sm" onclick="autoPlay()" id="autoPlayBtn">▶ 自动播放</button>
+                        </div>
+                        
+                        <!-- 局势评分曲线 -->
+                        <div class="mt-3">
+                            <canvas id="scoreChart" height="80"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- AI 对局分析 -->
+                <div class="card mb-3" id="aiAnalysisCard" style="display: none;">
+                    <div class="card-body">
+                        <h5>🤖 AI 对局分析</h5>
+                        <div id="aiAnalysisContent"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧：分析面板 -->
+            <div class="col-lg-4">
+                <!-- 统计概览 -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5>📈 走法统计</h5>
+                        <div class="row">
+                            <div class="col-4 stats-card">
+                                <div class="text-success" id="excellentCount">0</div>
+                                <small>好棋</small>
+                            </div>
+                            <div class="col-4 stats-card">
+                                <div class="text-warning" id="goodCount">0</div>
+                                <small>不错</small>
+                            </div>
+                            <div class="col-4 stats-card">
+                                <div class="text-danger" id="blunderCount">0</div>
+                                <small>昏招</small>
+                            </div>
+                        </div>
+                        <div class="text-center mt-2">
+                            <strong id="overallResult">--</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 建议走法 -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5>💡 当前建议</h5>
+                        <div id="suggestions">
+                            <small class="text-muted">点击"上一步"查看当前局面的建议走法</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 走法列表 -->
+                <div class="card">
+                    <div class="card-body">
+                        <ul class="nav nav-tabs" role="tablist">
+                            <li class="nav-item">
+                                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#moves">📜 走法</button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#analysis">🔍 详情</button>
+                            </li>
+                        </ul>
+                        <div class="tab-content">
+                            <div class="tab-pane fade show active" id="moves">
+                                <div id="moveList" style="max-height: 400px; overflow-y: auto;"></div>
+                            </div>
+                            <div class="tab-pane fade" id="analysis">
+                                <div id="moveDetail"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script th:inline="javascript">
+        const gameId = [[${game.id}]];
+        const isAiGame = [[${game.isAi}]];
+        let moveHistory = [];
+        let currentStep = 0;
+        let analysisData = null;
+        let scoreChart = null;
+        let autoPlayInterval = null;
+        
+        // 初始棋盘（不带颜色前缀）
+        // 红方在下方(7-9行)，黑方在上方(0-2行)
+        const initialBoard = [
+            ["車","馬","象","士","將","士","象","馬","車"],
+            [null,null,null,null,null,null,null,null,null],
+            [null,"炮",null,null,null,null,null,"炮",null],
+            ["卒",null,"卒",null,"卒",null,"卒",null,"卒"],
+            [null,null,null,null,null,null,null,null,null],
+            [null,null,null,null,null,null,null,null,null],
+            ["兵",null,"兵",null,"兵",null,"兵",null,"兵"],
+            [null,"炮",null,null,null,null,null,"炮",null],
+            [null,null,null,null,null,null,null,null,null],
+            ["車","馬","相","仕","帥","仕","相","馬","車"]
+        ];
+        
+        // 初始棋盘时红黑方位置（isRed数组）
+        const initialIsRed = [
+            [false,false,false,false,false,false,false,false,false], // 0: 黑
+            [false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false], // 2: 黑
+            [false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false],
+            [true,true,true,true,true,true,true,true,true],  // 6: 红
+            [true,true,true,true,true,true,true,true,true],
+            [true,true,true,true,true,true,true,true,true],  // 8: 红
+            [true,true,true,true,true,true,true,true,true]   // 9: 红
+        ];
+        
+        function initBoard() {
+            const board = document.getElementById('board');
+            board.innerHTML = '';
+            
+            // 创建格子
+            for (let i = 0; i < 10; i++) {
+                for (let j = 0; j < 9; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'chess-cell';
+                    cell.style.left = (j * 60) + 'px';
+                    cell.style.top = (i * 60) + 'px';
+                    board.appendChild(cell);
+                }
+            }
+            
+            drawBoardLines(board);
+            
+            const river = document.createElement('div');
+            river.className = 'river';
+            river.innerHTML = '楚河 &nbsp;&nbsp;&nbsp; 汉界';
+            board.appendChild(river);
+        }
+        
+        function drawBoardLines(board) {
+            const offset = 0; // 棋盘从0开始
+            
+            // 横向线条 - 10条横线（从第0列到第8列，完整跨越棋盘）
+            for (let i = 0; i < 10; i++) {
+                const line = document.createElement('div');
+                line.className = 'board-line line-horizontal';
+                line.style.top = ((i * 60) + 30 + offset) + 'px';
+                line.style.left = offset + 'px';
+                line.style.width = (540 - 1) + 'px'; // 棋盘宽度减1，避免超出
+                board.appendChild(line);
+            }
+            
+            // 垂直线条 - 9条竖线
+            for (let j = 0; j < 9; j++) {
+                if (j === 0 || j === 8) {
+                    // 最左和最右竖线 - 完整线条
+                    let line = document.createElement('div');
+                    line.className = 'board-line line-vertical';
+                    line.style.left = ((j * 60) + 30 + offset) + 'px';
+                    line.style.top = offset + 'px';
+                    line.style.height = '600px';
+                    board.appendChild(line);
+                } else {
+                    // 中间竖线 - 分成上下两段（楚河汉界）
+                    // 上半部分 (0-4行)
+                    let lineTop = document.createElement('div');
+                    lineTop.className = 'board-line line-vertical';
+                    lineTop.style.left = ((j * 60) + 30 + offset) + 'px';
+                    lineTop.style.top = offset + 'px';
+                    lineTop.style.height = '270px';
+                    board.appendChild(lineTop);
+                    
+                    // 下半部分 (5-9行)
+                    let lineBottom = document.createElement('div');
+                    lineBottom.className = 'board-line line-vertical';
+                    lineBottom.style.left = ((j * 60) + 30 + offset) + 'px';
+                    lineBottom.style.top = (330 + offset) + 'px';
+                    lineBottom.style.height = '270px';
+                    board.appendChild(lineBottom);
+                }
+            }
+            
+            // 宫室线条
+            addPalaceLines(board, 7, 3, 5);
+            addPalaceLines(board, 2, 3, 5);
+        }
+        
+        function addPalaceLines(board, row, colStart, colEnd) {
+            const positions = [
+                [row, colStart, row + 2, colEnd],
+                [row + 2, colStart, row, colEnd]
+            ];
+            
+            positions.forEach(([x1, y1, x2, y2]) => {
+                const line = document.createElement('div');
+                line.className = 'palace-line';
+                const dx = (y2 - y1) * 30;
+                const dy = (x2 - x1) * 30;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                line.style.width = length + 'px';
+                line.style.left = (y1 * 60 + 30) + 'px';
+                line.style.top = (x1 * 60 + 30) + 'px';
+                line.style.transform = `rotate(${angle}deg)`;
+                line.style.transformOrigin = '0 0';
+                board.appendChild(line);
+            });
+        }
+        
+        function renderBoard(boardData) {
+            const cells = document.querySelectorAll('.chess-cell');
+            cells.forEach(cell => cell.innerHTML = '');
+            
+            // boardData 可能包含 isRed 数组，或者我们需要跟踪当前棋盘状态
+            const isRedArray = boardData.isRed || null;
+            
+            for (let i = 0; i < 10; i++) {
+                for (let j = 0; j < 9; j++) {
+                    const piece = boardData[i][j];
+                    if (piece) {
+                        const cellIndex = i * 9 + j + 1;
+                        const cell = document.querySelector(`.chess-cell:nth-child(${cellIndex})`);
+                        const pieceDiv = document.createElement('div');
+                        
+                        // 判断颜色：优先使用 isRed 数组，否则使用行号推断
+                        let isRed;
+                        if (isRedArray && isRedArray[i]) {
+                            isRed = isRedArray[i][j];
+                        } else {
+                            // 默认为红方（下方）
+                            isRed = i >= 6;
+                        }
+                        
+                        pieceDiv.className = 'chess-piece ' + (isRed ? 'piece-red' : 'piece-black');
+                        pieceDiv.textContent = piece;
+                        cell.appendChild(pieceDiv);
+                    }
+                }
+            }
+        }
+        
+        function getQualityClass(quality) {
+            switch(quality) {
+                case '好棋': return 'quality-excellent';
+                case '不错': return 'quality-good';
+                case '可接受': return 'quality-acceptable';
+                case '均势': return 'quality-equal';
+                case '疑问手': return 'quality-mistake';
+                case '昏招': return 'quality-blunder';
+                default: return '';
+            }
+        }
+        
+        function renderMoveList() {
+            const list = document.getElementById('moveList');
+            let html = '<div style="display: flex; flex-wrap: wrap;">';
+            
+            for (let i = 0; i < moveHistory.length; i++) {
+                const move = moveHistory[i];
+                const isRed = i % 2 === 0;
+                const moveNum = Math.floor(i / 2) + 1;
+                const label = isRed ? `${moveNum}. 红` : `${moveNum}. 黑`;
+                
+                // 获取分析数据
+                let qualityHtml = '';
+                let keyMomentHtml = '';
+                if (analysisData && analysisData.moveAnalyses && analysisData.moveAnalyses[i]) {
+                    const ma = analysisData.moveAnalyses[i];
+                    const qualityClass = getQualityClass(ma.quality);
+                    qualityHtml = `<span class="${qualityClass}" title="${ma.comment}">${ma.quality}</span>`;
+                    if (ma.isKeyMoment) {
+                        keyMomentHtml = ' ⭐';
+                    }
+                }
+                
+                html += `<div class="move-item ${i === currentStep ? 'active' : ''} ${analysisData && analysisData.moveAnalyses && analysisData.moveAnalyses[i] && analysisData.moveAnalyses[i].isKeyMoment ? 'key-moment' : ''}" onclick="goToStep(${i})">${label}${keyMomentHtml}<br><small>${qualityHtml}</small></div>`;
+            }
+            
+            html += '</div>';
+            list.innerHTML = html;
+            
+            // 滚动到当前步
+            const activeItem = list.querySelector('.move-item.active');
+            if (activeItem) {
+                activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+        
+        function renderMoveDetail() {
+            const detail = document.getElementById('moveDetail');
+            if (!analysisData || !analysisData.moveAnalyses || !analysisData.moveAnalyses[currentStep]) {
+                detail.innerHTML = '<small class="text-muted">点击走法查看详情</small>';
+                return;
+            }
+            
+            const ma = analysisData.moveAnalyses[currentStep];
+            const isRed = currentStep % 2 === 0;
+            const moveNum = Math.floor(currentStep / 2) + 1;
+            
+            let html = `
+                <div class="mb-2">
+                    <strong>第 ${moveNum} 步 (${isRed ? '红方' : '黑方'})</strong>
+                </div>
+                <div class="mb-2">
+                    <span class="${getQualityClass(ma.quality)}">【${ma.quality}】</span>
+                </div>
+                <div class="mb-2"><small>${ma.comment}</small></div>
+                <div class="mb-2">
+                    <small class="text-muted">走子: ${ma.fromX},${ma.fromY} → ${ma.toX},${ma.toY}</small>
+                </div>
+            `;
+            
+            if (ma.isCheck) {
+                html += `<div class="mb-2"><span class="badge bg-danger">将军!</span></div>`;
+            }
+            if (ma.isCaptured) {
+                html += `<div class="mb-2"><span class="badge bg-warning">吃子</span></div>`;
+            }
+            if (ma.isKeyMoment) {
+                html += `<div class="mb-2"><span class="badge bg-info">关键局面</span></div>
+                         <div><small>${ma.keyMomentReason}</small></div>`;
+            }
+            
+            detail.innerHTML = html;
+        }
+        
+        function goToStep(step) {
+            currentStep = Math.max(0, Math.min(step, moveHistory.length - 1));
+            const board = JSON.parse(JSON.stringify(initialBoard));
+            const isRed = JSON.parse(JSON.stringify(initialIsRed));
+            
+            // 应用所有走法
+            for (let i = 0; i <= currentStep; i++) {
+                const move = moveHistory[i];
+                // 移动棋子
+                board[move.toX][move.toY] = board[move.fromX][move.fromY];
+                board[move.fromX][move.fromY] = null;
+                // 移动颜色标记
+                isRed[move.toX][move.toY] = isRed[move.fromX][move.fromY];
+                isRed[move.fromX][move.fromY] = false;
+            }
+            
+            // 添加 isRed 属性用于渲染
+            board.isRed = isRed;
+            
+            renderBoard(board);
+            renderMoveList();
+            renderMoveDetail();
+            updateCurrentScore();
+            loadSuggestions();
+        }
+        
+        function goToStart() { goToStep(0); }
+        function goToEnd() { goToStep(moveHistory.length - 1); }
+        function prevMove() { if (currentStep > 0) goToStep(currentStep - 1); }
+        function nextMove() { if (currentStep < moveHistory.length - 1) goToStep(currentStep + 1); }
+        
+        function autoPlay() {
+            console.log('autoPlay called, currentStep:', currentStep, 'moveHistory.length:', moveHistory.length);
+            
+            // 检查是否有移动历史
+            if (!moveHistory || moveHistory.length === 0) {
+                alert('没有走法记录，无法自动播放');
+                return;
+            }
+            
+            // 如果已经在最后一步，先跳到开始
+            if (currentStep >= moveHistory.length - 1) {
+                console.log('Already at end, going to start');
+                goToStep(0);
+            }
+            
+            if (autoPlayInterval) {
+                // 停止播放
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+                document.getElementById('autoPlayBtn').innerHTML = '▶ 自动播放';
+                console.log('Auto play stopped');
+            } else {
+                // 开始播放
+                document.getElementById('autoPlayBtn').innerHTML = '⏸ 暂停中...';
+                console.log('Starting auto play, interval: 1500ms');
+                
+                autoPlayInterval = setInterval(() => {
+                    console.log('Auto play tick, currentStep:', currentStep);
+                    if (currentStep < moveHistory.length - 1) {
+                        nextMove();
+                    } else {
+                        // 播放结束
+                        clearInterval(autoPlayInterval);
+                        autoPlayInterval = null;
+                        document.getElementById('autoPlayBtn').innerHTML = '▶ 重新播放';
+                        console.log('Auto play finished');
+                    }
+                }, 1500);
+            }
+        }
+        
+        function updateCurrentScore() {
+            const scoreEl = document.getElementById('currentScore');
+            if (!analysisData || !analysisData.scoreHistory) {
+                scoreEl.textContent = '等待分析...';
+                scoreEl.className = 'score-indicator score-equal';
+                return;
+            }
+            
+            const score = analysisData.scoreHistory[currentStep] || 0;
+            if (score > 100) {
+                scoreEl.textContent = `红方优势 +${score}`;
+                scoreEl.className = 'score-indicator score-red';
+            } else if (score < -100) {
+                scoreEl.textContent = `黑方优势 ${score}`;
+                scoreEl.className = 'score-indicator score-black';
+            } else {
+                scoreEl.textContent = `局面相当 (${score})`;
+                scoreEl.className = 'score-indicator score-equal';
+            }
+        }
+        
+        function initScoreChart() {
+            const ctx = document.getElementById('scoreChart').getContext('2d');
+            scoreChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: '局面评分 (红方视角)',
+                        data: [],
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { 
+                            title: { display: true, text: '步数', color: '#aaa' },
+                            ticks: { color: '#aaa' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        },
+                        y: { 
+                            title: { display: true, text: '评分', color: '#aaa' },
+                            ticks: { color: '#aaa' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateScoreChart() {
+            if (!scoreChart || !analysisData || !analysisData.scoreHistory) return;
+            
+            const labels = analysisData.scoreHistory.map((_, i) => i + 1);
+            scoreChart.data.labels = labels;
+            scoreChart.data.datasets[0].data = analysisData.scoreHistory;
+            
+            // 标记当前步
+            const pointColors = labels.map((_, i) => i === currentStep ? '#ffd700' : 'rgba(255, 99, 132, 1)');
+            const pointRadii = labels.map((_, i) => i === currentStep ? 8 : 3);
+            scoreChart.data.datasets[0].pointBackgroundColor = pointColors;
+            scoreChart.data.datasets[0].pointRadius = pointRadii;
+            
+            scoreChart.update();
+        }
+        
+        function updateStats() {
+            if (!analysisData) return;
+            
+            document.getElementById('excellentCount').textContent = analysisData.excellentMoves || 0;
+            document.getElementById('goodCount').textContent = analysisData.goodMoves || 0;
+            document.getElementById('blunderCount').textContent = (analysisData.mistakes || 0) + (analysisData.blunders || 0);
+            document.getElementById('overallResult').textContent = analysisData.overallResult || '--';
+            
+            // AI 分析
+            if (isAiGame && analysisData.aiAnalysis) {
+                document.getElementById('aiAnalysisCard').style.display = 'block';
+                const ai = analysisData.aiAnalysis;
+                let html = `
+                    <div class="ai-analysis">
+                        <h6>📊 AI 表现评估</h6>
+                        <p class="mb-2">${ai.overallAssessment}</p>
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="text-success">${ai.goodMoves}</div>
+                                <small>好棋</small>
+                            </div>
+                            <div class="col-4">
+                                <div class="text-warning">${ai.totalMistakes}</div>
+                                <small>失误</small>
+                            </div>
+                            <div class="col-4">
+                                <div class="text-danger">${ai.totalBlunders}</div>
+                                <small>昏招</small>
+                            </div>
+                        </div>
+                `;
+                
+                if (ai.observations && ai.observations.length > 0) {
+                    html += '<hr><h6>📝 详细观察</h6><ul class="small">';
+                    ai.observations.forEach(obs => {
+                        html += `<li>${obs}</li>`;
+                    });
+                    html += '</ul>';
+                }
+                
+                html += '</div>';
+                document.getElementById('aiAnalysisContent').innerHTML = html;
+            }
+        }
+        
+        function loadSuggestions() {
+            const suggestionsEl = document.getElementById('suggestions');
+            
+            if (currentStep >= moveHistory.length - 1) {
+                suggestionsEl.innerHTML = '<small class="text-muted">对局已结束</small>';
+                return;
+            }
+            
+            fetch(`/api/game/${gameId}/suggestions?step=${currentStep}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.suggestions) {
+                        let html = '';
+                        data.suggestions.forEach((s, i) => {
+                            html += `
+                                <div class="suggestion-item" onclick="showSuggestion(${s.fromX}, ${s.fromY}, ${s.toX}, ${s.toY})">
+                                    <div class="d-flex justify-content-between">
+                                        <span>建议 ${i + 1}</span>
+                                        <span class="${s.score > 0 ? 'text-success' : 'text-danger'}">${s.score > 0 ? '+' : ''}${s.score}</span>
+                                    </div>
+                                    <small class="text-muted">${s.reason}</small>
+                                </div>
+                            `;
+                        });
+                        suggestionsEl.innerHTML = html;
+                    } else {
+                        suggestionsEl.innerHTML = '<small class="text-muted">加载建议失败</small>';
+                    }
+                })
+                .catch(() => {
+                    suggestionsEl.innerHTML = '<small class="text-muted">加载建议失败</small>';
+                });
+        }
+        
+        function showSuggestion(fromX, fromY, toX, toY) {
+            // 高亮建议走法
+            const cells = document.querySelectorAll('.chess-cell');
+            cells.forEach(cell => {
+                cell.querySelector('.chess-piece')?.classList.remove('piece-suggested');
+            });
+            
+            const fromIndex = fromX * 9 + fromY + 1;
+            const toIndex = toX * 9 + toY + 1;
+            
+            const fromPiece = cells[fromIndex - 1]?.querySelector('.chess-piece');
+            const toCell = cells[toIndex - 1];
+            
+            if (fromPiece) fromPiece.classList.add('piece-suggested');
+            if (toCell) {
+                const indicator = document.createElement('div');
+                indicator.style.cssText = 'width:20px;height:20px;background:rgba(0,255,0,0.5);border-radius:50%;position:absolute;';
+                toCell.appendChild(indicator);
+                setTimeout(() => indicator.remove(), 2000);
+            }
+        }
+        
+        function exportPGN() {
+            fetch(`/api/game/${gameId}/export`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const blob = new Blob([data.pgn], { type: 'text/plain;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `chess_game_${gameId}.txt`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    } else {
+                        alert('导出失败: ' + data.message);
+                    }
+                });
+        }
+        
+        function loadGame() {
+            fetch('/api/game/' + gameId + '/pgn')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.moves && data.moves.length > 0) {
+                        moveHistory = data.moves;
+                        loadAnalysis();
+                    } else {
+                        renderBoard(initialBoard);
+                    }
+                })
+                .catch(() => {
+                    renderBoard(initialBoard);
+                });
+        }
+        
+        function loadAnalysis() {
+            fetch('/api/game/' + gameId + '/analysis')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        analysisData = data;
+                        goToStep(0);
+                        initScoreChart();
+                        updateScoreChart();
+                        updateStats();
+                    } else {
+                        console.error('Analysis failed:', data.message);
+                        goToStep(0);
+                    }
+                })
+                .catch(err => {
+                    console.error('Load analysis error:', err);
+                    goToStep(0);
+                });
+        }
+        
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowLeft': prevMove(); break;
+                case 'ArrowRight': nextMove(); break;
+                case 'Home': goToStart(); break;
+                case 'End': goToEnd(); break;
+                case ' ': autoPlay(); break;
+            }
+        });
+        
+        initBoard();
+        loadGame();
+    </script>
+</body>
+</html>

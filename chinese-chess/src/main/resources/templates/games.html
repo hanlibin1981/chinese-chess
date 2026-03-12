@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>棋谱库 - 中国象棋</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; }
+        .navbar { background: rgba(0,0,0, !important; }
+0.3)        .card { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); }
+        .card-body { color: #fff; }
+        .table { color: #fff; }
+        .table a { color: #4ade80; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">🎮 中国象棋</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-item nav-link" href="/">大厅</a>
+                <th:block th:if="${user}">
+                    <span class="nav-item nav-link" th:text="${user.username}"></span>
+                    <a class="nav-item nav-link" href="/logout">退出</a>
+                </th:block>
+                <th:block th:unless="${user}">
+                    <a class="nav-item nav-link" href="/login">登录</a>
+                </th:block>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title">📚 棋谱库</h4>
+                <p class="text-muted" th:if="${user}">显示您的对局记录</p>
+                
+                <table class="table table-hover mt-3">
+                    <thead>
+                        <tr>
+                            <th>编号</th>
+                            <th>红方</th>
+                            <th>黑方</th>
+                            <th>结果</th>
+                            <th>日期</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="game, iter : ${games}">
+                            <td th:text="${iter.count}">1</td>
+                            <td th:text="${game.redUsername}">红方</td>
+                            <td th:text="${game.isAi ? 'AI' : game.blackUsername}">黑方</td>
+                            <td>
+                                <span th:if="${game.winner == 'red'}" class="text-danger">红胜</span>
+                                <span th:if="${game.winner == 'black'}" class="text-info">黑胜</span>
+                                <span th:if="${game.winner == 'draw'}" class="text-warning">和棋</span>
+                                <span th:unless="${game.winner}" class="text-muted">进行中</span>
+                            </td>
+                            <td th:text="${#temporals.format(game.createdAt, 'yyyy-MM-dd HH:mm')}">2024-01-01</td>
+                            <td>
+                                <a th:href="@{/review/{id}(id=${game.id})}" class="btn btn-sm btn-primary">复盘</a>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <p th:if="${games.empty}" class="text-center text-muted">暂无棋谱记录</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
