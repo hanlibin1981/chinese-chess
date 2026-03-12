@@ -877,6 +877,23 @@
         let redTime = 600; // 10分钟
         let blackTime = 600;
         let timerRunning = false;
+        let currentTimerColor = 'red'; // 当前计时方
+        
+        // 初始化计时器
+        function initTimer() {
+            pauseTimer();
+            redTime = 600;
+            blackTime = 600;
+            currentTimerColor = 'red';
+            updateTimerDisplay('red', redTime);
+            updateTimerDisplay('black', blackTime);
+        }
+        
+        // 游戏开始时自动启动计时器
+        function startGameTimer() {
+            initTimer();
+            startTimer();
+        }
         
         function toggleTimer() {
             if (timerRunning) {
@@ -890,19 +907,22 @@
             if (timerRunning) return;
             timerRunning = true;
             timerInterval = setInterval(() => {
-                if (currentBoard && currentBoard.currentTurn === 'red') {
+                if (currentTimerColor === 'red') {
                     redTime--;
                     updateTimerDisplay('red', redTime);
                     if (redTime <= 0) {
-                        clearInterval(timerInterval);
+                        pauseTimer();
                         alert('红方超时负！');
+                        // 自动发送认输
+                        return;
                     }
-                } else if (currentBoard && currentBoard.currentTurn === 'black') {
+                } else if (currentTimerColor === 'black') {
                     blackTime--;
                     updateTimerDisplay('black', blackTime);
                     if (blackTime <= 0) {
-                        clearInterval(timerInterval);
+                        pauseTimer();
                         alert('黑方超时负！');
+                        return;
                     }
                 }
             }, 1000);
@@ -987,6 +1007,16 @@
                     if (data.type === 'state' || data.type === 'move') {
                         const newBoard = data.board || data;
                         
+                        // 首次收到棋盘数据时启动计时器
+                        if (!currentBoard && newBoard) {
+                            startGameTimer();
+                        }
+                        
+                        // 检测换回合，切换计时器
+                        if (prevBoard && prevBoard.currentTurn !== newBoard.currentTurn) {
+                            currentTimerColor = newBoard.currentTurn;
+                        }
+                        
                         // 播放声音和动画
                         if (prevBoard) {
                             const moved = findMovedPiece(prevBoard, newBoard);
@@ -1004,7 +1034,15 @@
                         
                         renderBoard(newBoard);
                         updateMoveList(newBoard);
+                        
+                        // 切换计时器
+                        if (currentTimerColor === 'red') {
+                            currentTimerColor = 'black';
+                        } else {
+                            currentTimerColor = 'red';
+                        }
                     } else if (data.type === 'gameOver') {
+                        pauseTimer(); // 游戏结束时停止计时器
                         if (data.winner === myColor) {
                             playWinSound();
                         } else {
@@ -1012,6 +1050,7 @@
                         }
                         alert('游戏结束！' + (data.winner === 'red' ? '红方' : '黑方') + '获胜！');
                     } else if (data.type === 'checkmate') {
+                        pauseTimer(); // 游戏结束时停止计时器
                         if (data.winner === myColor) {
                             playWinSound();
                         } else {
@@ -1039,6 +1078,7 @@
                         // 重新开始
                         renderBoard(data.board);
                         updateMoveList(data.board);
+                        startGameTimer(); // 重新开始时重置并启动计时器
                         alert('游戏重新开始！');
                     } else if (data.type === 'hint') {
                         // 显示走法提示
