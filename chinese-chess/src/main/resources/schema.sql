@@ -24,7 +24,9 @@ CREATE TABLE IF NOT EXISTS games (
     ended_at DATETIME
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 索引
+-- 索引 (使用 DROP INDEX 先删除再创建)
+DROP INDEX IF EXISTS idx_games_status ON games;
+DROP INDEX IF EXISTS idx_games_player ON games;
 CREATE INDEX idx_games_status ON games(status);
 CREATE INDEX idx_games_player ON games(player_red, player_black);
 

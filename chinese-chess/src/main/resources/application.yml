@@ -1,7 +1,9 @@
 server:
-  port: 8080
+  port: 8082
 
 spring:
+  main:
+    allow-circular-references: true
   application:
     name: chinese-chess
   datasource:
@@ -15,7 +17,7 @@ spring:
       minimum-idle: 5
   sql:
     init:
-      mode: always
+      mode: never
       schema-locations: classpath:schema.sql
   thymeleaf:
     cache: false

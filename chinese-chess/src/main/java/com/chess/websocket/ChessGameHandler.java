@@ -189,7 +189,8 @@ public class ChessGameHandler {
             Thread.sleep(500); // 稍微延迟，让玩家看到局面
         } catch (InterruptedException e) {}
         
-        Move aiMove = chessEngine.getBestMove(state.board);
+        // 使用带难度的AI
+        Move aiMove = chessEngine.getBestMove(state.board, "black");
         if (aiMove != null) {
             // 保存AI走棋前的棋盘
             state.history.push(state.board.copy());
@@ -318,6 +319,65 @@ public class ChessGameHandler {
                 "type", "restarted",
                 "board", board
         ));
+    }
+    
+    /**
+     * 请求走法提示
+     */
+    @MessageMapping("/game/hint")
+    public void requestHint(Map<String, Object> data) {
+        Long gameId = Long.parseLong(data.get("gameId").toString());
+        Long userId = Long.parseLong(data.get("userId").toString());
+        
+        GameState state = gameStates.get(gameId);
+        if (state == null) return;
+        
+        // 获取当前玩家的颜色
+        String color = null;
+        if (state.redPlayer.equals(userId)) {
+            color = "red";
+        } else if (state.blackPlayer != null && state.blackPlayer.equals(userId)) {
+            color = "black";
+        }
+        
+        if (color == null) return;
+        
+        // 获取提示走法
+        Move hintMove = chessEngine.getHint(state.board, color);
+        
+        if (hintMove != null) {
+            messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+                    "type", "hint",
+                    "hintMove", hintMove,
+                    "fromX", hintMove.getFromX(),
+                    "fromY", hintMove.getFromY(),
+                    "toX", hintMove.getToX(),
+                    "toY", hintMove.getToY()
+            ));
+        }
+    }
+    
+    /**
+     * 设置AI难度
+     */
+    @MessageMapping("/game/setDifficulty")
+    public void setDifficulty(Map<String, Object> data) {
+        String difficulty = data.get("difficulty").toString();
+        
+        try {
+            ChessEngine.Difficulty diff = ChessEngine.Difficulty.valueOf(difficulty.toUpperCase());
+            chessEngine.setDifficulty(diff);
+            
+            messagingTemplate.convertAndSend("/topic/game/global", Map.of(
+                    "type", "difficultyChanged",
+                    "difficulty", diff.getName()
+            ));
+        } catch (IllegalArgumentException e) {
+            messagingTemplate.convertAndSend("/topic/game/global", Map.of(
+                    "type", "error",
+                    "message", "无效的难度等级"
+            ));
+        }
     }
     
     private boolean isValidMove(ChessBoard board, Move move, String color) {
