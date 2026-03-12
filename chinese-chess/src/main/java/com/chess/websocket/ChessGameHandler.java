@@ -3,6 +3,7 @@ package com.chess.websocket;
 import com.chess.model.ChessBoard;
 import com.chess.model.Game;
 import com.chess.model.Move;
+import com.chess.service.ChessAnalysisService;
 import com.chess.service.ChessEngine;
 import com.chess.service.GameService;
 import com.chess.service.UserService;
@@ -28,6 +29,9 @@ public class ChessGameHandler {
     
     @Autowired
     private ChessEngine chessEngine;
+    
+    @Autowired
+    private ChessAnalysisService analysisService;
     
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
@@ -378,6 +382,28 @@ public class ChessGameHandler {
                     "message", "无效的难度等级"
             ));
         }
+    }
+    
+    /**
+     * 请求实时局面分析
+     */
+    @MessageMapping("/game/analyze")
+    public void analyzePosition(Map<String, Object> data) {
+        Long gameId = Long.parseLong(data.get("gameId").toString());
+        
+        GameState state = gameStates.get(gameId);
+        if (state == null) return;
+        
+        // 获取实时分析
+        Map<String, Object> analysis = analysisService.getRealtimeAnalysis(state.board);
+        
+        messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+                "type", "analysis",
+                "analysis", analysis,
+                "score", analysis.get("score"),
+                "evaluation", analysis.get("evaluation"),
+                "suggestion", analysis.get("suggestion")
+        ));
     }
     
     private boolean isValidMove(ChessBoard board, Move move, String color) {

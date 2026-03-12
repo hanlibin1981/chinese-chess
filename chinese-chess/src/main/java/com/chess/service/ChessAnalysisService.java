@@ -608,4 +608,108 @@ public class ChessAnalysisService {
     public ChessEngine getChessEngine() {
         return chessEngine;
     }
+    
+    /**
+     * 获取实时局面分析
+     */
+    public Map<String, Object> getRealtimeAnalysis(ChessBoard board) {
+        Map<String, Object> analysis = new HashMap<>();
+        
+        int score = evaluatePosition(board);
+        analysis.put("score", score);
+        
+        // 局面评估描述
+        String evaluation;
+        if (Math.abs(score) < 50) {
+            evaluation = "均势";
+        } else if (score > 0) {
+            evaluation = score > 200 ? "红方大优" : "红方稍占优";
+        } else {
+            evaluation = score < -200 ? "黑方大优" : "黑方稍占优";
+        }
+        analysis.put("evaluation", evaluation);
+        
+        // 棋子价值统计
+        Map<String, Integer> pieceCount = countPieces(board);
+        analysis.put("pieceCount", pieceCount);
+        
+        // 威胁分析
+        List<String> threats = analyzeThreats(board);
+        analysis.put("threats", threats);
+        
+        // 建议
+        String suggestion = getSuggestion(board, score);
+        analysis.put("suggestion", suggestion);
+        
+        return analysis;
+    }
+    
+    /**
+     * 统计棋子数量
+     */
+    private Map<String, Integer> countPieces(ChessBoard board) {
+        Map<String, Integer> count = new HashMap<>();
+        String[][] b = board.getBoard();
+        boolean[][] isRed = board.getIsRed();
+        
+        int redPieces = 0, blackPieces = 0;
+        int redValue = 0, blackValue = 0;
+        
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (b[i][j] != null) {
+                    int value = PIECE_VALUES.getOrDefault(b[i][j], 0);
+                    if (isRed[i][j]) {
+                        redPieces++;
+                        redValue += value;
+                    } else {
+                        blackPieces++;
+                        blackValue += value;
+                    }
+                }
+            }
+        }
+        
+        count.put("redPieces", redPieces);
+        count.put("blackPieces", blackPieces);
+        count.put("redValue", redValue);
+        count.put("blackValue", blackValue);
+        count.put("materialDiff", redValue - blackValue);
+        
+        return count;
+    }
+    
+    /**
+     * 分析威胁
+     */
+    private List<String> analyzeThreats(ChessBoard board) {
+        List<String> threats = new ArrayList<>();
+        
+        // 检查是否被将军
+        if (chessEngine.isKingInCheck(board, "red")) {
+            threats.add("红方被将军！");
+        }
+        if (chessEngine.isKingInCheck(board, "black")) {
+            threats.add("黑方被将军！");
+        }
+        
+        return threats;
+    }
+    
+    /**
+     * 获取建议
+     */
+    private String getSuggestion(ChessBoard board, int score) {
+        if (chessEngine.isKingInCheck(board, board.getCurrentTurn())) {
+            return "当前被将军，应先解除将军！";
+        }
+        
+        if (score > 100) {
+            return "局面占优，建议主动进攻！";
+        } else if (score < -100) {
+            return "局面被动，建议稳固防守！";
+        } else {
+            return "局面均衡，稳步推进！";
+        }
+    }
 }

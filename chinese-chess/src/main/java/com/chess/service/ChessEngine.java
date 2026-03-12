@@ -316,6 +316,25 @@ public class ChessEngine {
      * @return 最佳走法
      */
     public Move getBestMove(ChessBoard board, String color) {
+        // 检查是否可以使用开局库（前4步）
+        int moveCount = board.getMoveCount();
+        int myMoveCount = color.equals("red") ? (moveCount / 2 + 1) : ((moveCount + 1) / 2 + 1);
+        
+        // 困难难度在前4步优先使用开局库
+        if (currentDifficulty == Difficulty.HARD && myMoveCount <= 4) {
+            OpeningBook.OpeningMove openingMove = OpeningBook.getBookMove(board, color, myMoveCount);
+            if (openingMove != null) {
+                // 转换为Move对象
+                Move move = new Move(openingMove.fromX, openingMove.fromY, 
+                                     openingMove.toX, openingMove.toY, openingMove.piece);
+                // 验证走法合法性
+                if (isLegalMove(board, move, color)) {
+                    System.out.println("AI使用开局库: " + OpeningBook.getOpeningName(board, color, myMoveCount));
+                    return move;
+                }
+            }
+        }
+        
         switch (currentDifficulty) {
             case EASY:
                 return getEasyMove(board, color);
@@ -326,6 +345,19 @@ public class ChessEngine {
             default:
                 return getMediumMove(board, color);
         }
+    }
+    
+    /**
+     * 检查走法是否合法
+     */
+    private boolean isLegalMove(ChessBoard board, Move move, String color) {
+        List<Move> validMoves = getAllValidMoves(board, color);
+        return validMoves.stream().anyMatch(m -> 
+            m.getFromX() == move.getFromX() && 
+            m.getFromY() == move.getFromY() && 
+            m.getToX() == move.getToX() && 
+            m.getToY() == move.getToY()
+        );
     }
     
     /**
