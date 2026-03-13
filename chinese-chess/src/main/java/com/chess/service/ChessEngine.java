@@ -31,20 +31,24 @@ public class ChessEngine {
     
     // AI 难度等级
     public enum Difficulty {
-        EASY(1, "简单"),      // 随机落子 + 少量搜索
-        MEDIUM(2, "中等"),    // 2层搜索
-        HARD(3, "困难");      // 3层搜索
+        EASY(1, "简单", 1),      // 随机落子 + 1层搜索
+        MEDIUM(2, "中等", 2),    // 2层搜索
+        HARD(3, "困难", 3),      // 3层搜索
+        EXPERT(4, "大师", 4);     // 4层搜索
         
         private final int level;
         private final String name;
+        private final int searchDepth;
         
-        Difficulty(int level, String name) {
+        Difficulty(int level, String name, int searchDepth) {
             this.level = level;
             this.name = name;
+            this.searchDepth = searchDepth;
         }
         
         public int getLevel() { return level; }
         public String getName() { return name; }
+        public int getSearchDepth() { return searchDepth; }
     }
     
     // 当前难度默认中等
@@ -67,39 +71,8 @@ public class ChessEngine {
         return isRed[x1][y1] == isRed[x2][y2];
     }
     
-    public List<Move> getAllValidMoves(ChessBoard board, String color) {
-        List<Move> moves = new ArrayList<>();
-        String[][] b = board.getBoard();
-        boolean[][] isRed = board.getIsRed();
-        
-        for (int i = 0; i < 10; i++) {
-            for (int j = 0; j < 9; j++) {
-                if (b[i][j] != null && isRed[i][j] == color.equals("red")) {
-                    List<Move> pieceMoves = getValidMovesForPiece(board, i, j, b[i][j]);
-                    for (Move move : pieceMoves) {
-                        // 模拟走棋后检查是否合法
-                        ChessBoard testBoard = makeMoveWithoutRecording(board, move);
-                        
-                        // 检查1: 是否会导致将对将
-                        if (isKingsFacing(testBoard)) {
-                            continue;
-                        }
-                        
-                        // 检查2: 走棋后自己的王是否被将军（非法走法）
-                        if (isKingInCheck(testBoard, color)) {
-                            continue;
-                        }
-                        
-                        moves.add(move);
-                    }
-                }
-            }
-        }
-        return moves;
-    }
-    
     /**
-     * 检查两个将帅是否在同一列且无遮挡面对面
+     * 检查将对将（将帅对面）是否非法
      */
     private boolean isKingsFacing(ChessBoard board) {
         String[][] b = board.getBoard();
@@ -108,7 +81,6 @@ public class ChessEngine {
         int redKingX = -1, redKingY = -1;
         int blackKingX = -1, blackKingY = -1;
         
-        // 找到将帅位置
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 9; j++) {
                 if (b[i][j] != null) {
@@ -121,17 +93,14 @@ public class ChessEngine {
             }
         }
         
-        // 如果任一将帅不存在，返回false
         if (redKingX < 0 || blackKingX < 0) {
             return false;
         }
         
-        // 检查是否在同一列
         if (redKingY != blackKingY) {
             return false;
         }
         
-        // 检查中间是否有遮挡
         int minX = Math.min(redKingX, blackKingX);
         int maxX = Math.max(redKingX, blackKingX);
         
@@ -144,9 +113,34 @@ public class ChessEngine {
         return true;
     }
     
-    /**
-     * 模拟走棋但不记录到历史（用于检测走棋后是否合法）
-     */
+    public List<Move> getAllValidMoves(ChessBoard board, String color) {
+        List<Move> moves = new ArrayList<>();
+        String[][] b = board.getBoard();
+        boolean[][] isRed = board.getIsRed();
+        
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (b[i][j] != null && isRed[i][j] == color.equals("red")) {
+                    List<Move> pieceMoves = getValidMovesForPiece(board, i, j, b[i][j]);
+                    for (Move move : pieceMoves) {
+                        ChessBoard testBoard = makeMoveWithoutRecording(board, move);
+                        
+                        if (isKingsFacing(testBoard)) {
+                            continue;
+                        }
+                        
+                        if (isKingInCheck(testBoard, color)) {
+                            continue;
+                        }
+                        
+                        moves.add(move);
+                    }
+                }
+            }
+        }
+        return moves;
+    }
+    
     private ChessBoard makeMoveWithoutRecording(ChessBoard board, Move move) {
         ChessBoard newBoard = board.copy();
         String[][] b = newBoard.getBoard();
@@ -164,77 +158,10 @@ public class ChessEngine {
         return newBoard;
     }
     
-    /**
-     * 检查走法是否会导致将对将（将帅对面）
-     * 需要检查：
-     * 1. 如果是王移动，检查移动后是否与对方王对面
-     * 2. 如果是其他棋子移动，检查是否露出了对方面前的直线导致将帅对面
-     */
-    private boolean wouldFaceKing(ChessBoard board, Move move) {
-        String[][] b = board.getBoard();
-        boolean[][] isRed = board.getIsRed();
-        
-        String piece = b[move.getFromX()][move.getFromY()];
-        boolean isKing = piece.equals("帥") || piece.equals("將");
-        
-        // 模拟移动后的棋盘
-        ChessBoard tempBoard = board.copy();
-        String tempPiece = tempBoard.getBoard()[move.getFromX()][move.getFromY()];
-        boolean tempIsRed = tempBoard.getIsRed()[move.getFromX()][move.getFromY()];
-        
-        // 执行移动
-        tempBoard.getBoard()[move.getFromX()][move.getFromY()] = null;
-        tempBoard.getIsRed()[move.getFromX()][move.getFromY()] = false;
-        tempBoard.getBoard()[move.getToX()][move.getToY()] = tempPiece;
-        tempBoard.getIsRed()[move.getToX()][move.getToY()] = tempIsRed;
-        
-        // 找到红方和黑方的帅/将
-        int redKingX = -1, redKingY = -1;
-        int blackKingX = -1, blackKingY = -1;
-        
-        for (int i = 0; i < 10; i++) {
-            for (int j = 0; j < 9; j++) {
-                if (tempBoard.getBoard()[i][j] != null) {
-                    if (tempBoard.getBoard()[i][j].equals("帥") && tempBoard.getIsRed()[i][j]) {
-                        redKingX = i;
-                        redKingY = j;
-                    } else if (tempBoard.getBoard()[i][j].equals("將") && !tempBoard.getIsRed()[i][j]) {
-                        blackKingX = i;
-                        blackKingY = j;
-                    }
-                }
-            }
-        }
-        
-        // 如果任一王不存在，返回false（异常情况）
-        if (redKingX < 0 || blackKingX < 0) {
-            return false;
-        }
-        
-        // 检查是否在同一列且之间无遮挡
-        if (redKingY == blackKingY) {
-            int minX = Math.min(redKingX, blackKingX);
-            int maxX = Math.max(redKingX, blackKingX);
-            boolean blocked = false;
-            for (int x = minX + 1; x < maxX; x++) {
-                if (tempBoard.getBoard()[x][redKingY] != null) {
-                    blocked = true;
-                    break;
-                }
-            }
-            if (!blocked) {
-                return true; // 将对将
-            }
-        }
-        
-        return false;
-    }
-    
     private List<Move> getValidMovesForPiece(ChessBoard board, int x, int y, String piece) {
         List<Move> moves = new ArrayList<>();
-        String type = piece;
         
-        switch (type) {
+        switch (piece) {
             case "車": moves.addAll(getRookMoves(board, x, y)); break;
             case "馬": moves.addAll(getKnightMoves(board, x, y)); break;
             case "炮": moves.addAll(getCannonMoves(board, x, y)); break;
@@ -251,6 +178,7 @@ public class ChessEngine {
         String[][] b = board.getBoard();
         String piece = b[x][y];
         int[][] dirs = {{-1,0},{1,0},{0,-1},{0,1}};
+        
         for (int[] dir : dirs) {
             int nx = x + dir[0], ny = y + dir[1];
             while (nx >= 0 && nx < 10 && ny >= 0 && ny < 9) {
@@ -274,6 +202,7 @@ public class ChessEngine {
         String piece = b[x][y];
         int[][] jumps = {{-2,-1},{-2,1},{-1,-2},{-1,2},{1,-2},{1,2},{2,-1},{2,1}};
         int[][] legs = {{-1,0},{-1,0},{0,-1},{0,1},{0,-1},{0,1},{1,0},{1,0}};
+        
         for (int i = 0; i < jumps.length; i++) {
             int nx = x + jumps[i][0], ny = y + jumps[i][1];
             int lx = x + legs[i][0], ly = y + legs[i][1];
@@ -323,6 +252,7 @@ public class ChessEngine {
         boolean isRed = board.getIsRed()[x][y];
         int minX = isRed ? 7 : 0, maxX = isRed ? 9 : 2;
         int[][] dirs = {{-1,0},{1,0},{0,-1},{0,1}};
+        
         for (int[] dir : dirs) {
             int nx = x + dir[0], ny = y + dir[1];
             if (nx >= minX && nx <= maxX && ny >= 3 && ny <= 5) {
@@ -341,6 +271,7 @@ public class ChessEngine {
         boolean isRed = board.getIsRed()[x][y];
         int minX = isRed ? 7 : 0, maxX = isRed ? 9 : 2;
         int[][] dirs = {{-1,-1},{-1,1},{1,-1},{1,1}};
+        
         for (int[] dir : dirs) {
             int nx = x + dir[0], ny = y + dir[1];
             if (nx >= minX && nx <= maxX && ny >= 3 && ny <= 5) {
@@ -359,13 +290,11 @@ public class ChessEngine {
         boolean isRed = board.getIsRed()[x][y];
         int[][] dirs = {{-2,-2},{-2,2},{2,-2},{2,2}};
         int[][] blocks = {{-1,-1},{-1,1},{1,-1},{1,1}};
+        
         for (int i = 0; i < dirs.length; i++) {
             int nx = x + dirs[i][0], ny = y + dirs[i][1];
             int bx = x + blocks[i][0], by = y + blocks[i][1];
-            // 检查阻挡点是否在棋盘内
-            if (bx < 0 || bx >= 10 || by < 0 || by >= 9) {
-                continue;
-            }
+            if (bx < 0 || bx >= 10 || by < 0 || by >= 9) continue;
             boolean validRow = isRed ? (nx >= 5 && nx <= 9) : (nx >= 0 && nx <= 4);
             if (validRow && ny >= 0 && ny < 9 && b[bx][by] == null) {
                 if (b[nx][ny] == null || !isSameSide(board, x, y, nx, ny)) {
@@ -382,12 +311,14 @@ public class ChessEngine {
         String piece = b[x][y];
         boolean isRed = board.getIsRed()[x][y];
         int forward = isRed ? -1 : 1;
+        
         int nx = x + forward;
         if (nx >= 0 && nx < 10) {
             if (b[nx][y] == null || !isSameSide(board, x, y, nx, y)) {
                 moves.add(new Move(x, y, nx, y, piece));
             }
         }
+        
         boolean crossed = isRed ? (x <= 4) : (x >= 5);
         if (crossed) {
             if (y > 0 && (b[x][y-1] == null || !isSameSide(board, x, y, x, y-1))) {
@@ -407,7 +338,6 @@ public class ChessEngine {
         String piece = b[move.getFromX()][move.getFromY()];
         boolean pieceIsRed = isRed[move.getFromX()][move.getFromY()];
         
-        // 记录被吃的棋子
         String captured = b[move.getToX()][move.getToY()];
         move.setCaptured(captured);
         
@@ -417,33 +347,30 @@ public class ChessEngine {
         b[move.getToX()][move.getToY()] = piece;
         isRed[move.getToX()][move.getToY()] = pieceIsRed;
         
-        // 保存走法到历史记录
         newBoard.getMoves().add(move);
         
         newBoard.setCurrentTurn(color.equals("red") ? "black" : "red");
         newBoard.setMoveCount(newBoard.getMoveCount() + 1);
+        
+        // 每次走棋后清理置换表
+        clearTranspositionTable();
+        
         return newBoard;
     }
     
     /**
-     * 获取AI最佳走法（根据当前难度）
-     * @param board 当前棋盘
-     * @param color AI颜色 (red 或 black)
-     * @return 最佳走法
+     * 获取AI最佳走法
      */
     public Move getBestMove(ChessBoard board, String color) {
-        // 检查是否可以使用开局库（前4步）
         int moveCount = board.getMoveCount();
         int myMoveCount = color.equals("red") ? (moveCount / 2 + 1) : ((moveCount + 1) / 2 + 1);
         
-        // 困难难度在前4步优先使用开局库
-        if (currentDifficulty == Difficulty.HARD && myMoveCount <= 4) {
+        // 困难及以上难度在前8步优先使用开局库
+        if (currentDifficulty.getSearchDepth() >= 3 && myMoveCount <= 8) {
             OpeningBook.OpeningMove openingMove = OpeningBook.getBookMove(board, color, myMoveCount);
             if (openingMove != null) {
-                // 转换为Move对象
                 Move move = new Move(openingMove.fromX, openingMove.fromY, 
                                      openingMove.toX, openingMove.toY, openingMove.piece);
-                // 验证走法合法性
                 if (isLegalMove(board, move, color)) {
                     System.out.println("AI使用开局库: " + OpeningBook.getOpeningName(board, color, myMoveCount));
                     return move;
@@ -452,20 +379,14 @@ public class ChessEngine {
         }
         
         switch (currentDifficulty) {
-            case EASY:
-                return getEasyMove(board, color);
-            case MEDIUM:
-                return getMediumMove(board, color);
-            case HARD:
-                return getHardMove(board, color);
-            default:
-                return getMediumMove(board, color);
+            case EASY: return getEasyMove(board, color);
+            case MEDIUM: return getMediumMove(board, color);
+            case HARD: return getHardMove(board, color);
+            case EXPERT: return getExpertMove(board, color);
+            default: return getMediumMove(board, color);
         }
     }
     
-    /**
-     * 检查走法是否合法
-     */
     private boolean isLegalMove(ChessBoard board, Move move, String color) {
         List<Move> validMoves = getAllValidMoves(board, color);
         return validMoves.stream().anyMatch(m -> 
@@ -476,16 +397,12 @@ public class ChessEngine {
         );
     }
     
-    /**
-     * 简单难度：80%概率随机，20%概率考虑吃子
-     */
     private Move getEasyMove(ChessBoard board, String color) {
         List<Move> allMoves = getAllValidMoves(board, color);
         if (allMoves.isEmpty()) return null;
         
         Random rand = new Random();
         
-        // 20%概率选择最佳走法（吃子或将军）
         if (rand.nextInt(100) < 20) {
             List<Move> goodMoves = new ArrayList<>();
             for (Move move : allMoves) {
@@ -496,7 +413,6 @@ public class ChessEngine {
             if (!goodMoves.isEmpty()) {
                 return goodMoves.get(rand.nextInt(goodMoves.size()));
             }
-            // 检查将军走法
             for (Move move : allMoves) {
                 ChessBoard testBoard = makeMove(board, move, color);
                 if (isKingInCheck(testBoard, color.equals("red") ? "black" : "red")) {
@@ -508,22 +424,14 @@ public class ChessEngine {
             }
         }
         
-        // 随机选择
         return allMoves.get(rand.nextInt(allMoves.size()));
     }
     
-    /**
-     * 中等难度：2层Alpha-Beta搜索
-     */
     private Move getMediumMove(ChessBoard board, String color) {
-        return alphaBetaSearch(board, color, 2, Integer.MIN_VALUE, Integer.MAX_VALUE).move;
+        return alphaBetaSearch(board, color, currentDifficulty.getSearchDepth(), Integer.MIN_VALUE, Integer.MAX_VALUE).move;
     }
     
-    /**
-     * 困难难度：3层Alpha-Beta搜索 + 走法排序
-     */
     private Move getHardMove(ChessBoard board, String color) {
-        // 先做走法排序，优先搜索好的走法
         List<Move> moves = getAllValidMoves(board, color);
         moves = orderMoves(board, moves, color);
         
@@ -537,14 +445,14 @@ public class ChessEngine {
             int score;
             
             if (color.equals("red")) {
-                score = alphaBetaSearch(newBoard, "black", 2, alpha, beta).score;
+                score = alphaBetaSearch(newBoard, "black", currentDifficulty.getSearchDepth() - 1, alpha, beta).score;
                 if (score > bestScore) {
                     bestScore = score;
                     bestMove = move;
                 }
                 alpha = Math.max(alpha, score);
             } else {
-                score = alphaBetaSearch(newBoard, "red", 2, alpha, beta).score;
+                score = alphaBetaSearch(newBoard, "red", currentDifficulty.getSearchDepth() - 1, alpha, beta).score;
                 if (score < bestScore) {
                     bestScore = score;
                     bestMove = move;
@@ -552,22 +460,50 @@ public class ChessEngine {
                 beta = Math.min(beta, score);
             }
             
-            if (beta <= alpha) {
-                break; // 剪枝
-            }
+            if (beta <= alpha) break;
         }
         
         return bestMove != null ? bestMove : (moves.isEmpty() ? null : moves.get(0));
     }
     
-    /**
-     * Alpha-Beta搜索（带置换表优化）
-     */
+    private Move getExpertMove(ChessBoard board, String color) {
+        List<Move> moves = getAllValidMoves(board, color);
+        moves = orderMoves(board, moves, color);
+        
+        Move bestMove = null;
+        int bestScore = color.equals("red") ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+        int alpha = Integer.MIN_VALUE;
+        int beta = Integer.MAX_VALUE;
+        
+        for (Move move : moves) {
+            ChessBoard newBoard = makeMove(board, move, color);
+            int score;
+            
+            if (color.equals("red")) {
+                score = alphaBetaSearch(newBoard, "black", currentDifficulty.getSearchDepth() - 1, alpha, beta).score;
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+                alpha = Math.max(alpha, score);
+            } else {
+                score = alphaBetaSearch(newBoard, "red", currentDifficulty.getSearchDepth() - 1, alpha, beta).score;
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+                beta = Math.min(beta, score);
+            }
+            
+            if (beta <= alpha) break;
+        }
+        
+        return bestMove != null ? bestMove : (moves.isEmpty() ? null : moves.get(0));
+    }
+    
     private SearchResult alphaBetaSearch(ChessBoard board, String color, int depth, int alpha, int beta) {
-        // 计算当前局面哈希
         int hash = zobristHash(board);
         
-        // 检查置换表
         TTEntry ttEntry = tt.get(hash);
         if (ttEntry != null && ttEntry.depth >= depth) {
             if (ttEntry.type == TTEntry.EXACT) {
@@ -580,8 +516,13 @@ public class ChessEngine {
         }
         
         if (depth == 0) {
-            int score = analysisService.evaluatePosition(board);
-            // 存入置换表
+            int score;
+            if (analysisService != null) {
+                score = analysisService.evaluatePosition(board);
+            } else {
+                // 简单评估函数（当analysisService未注入时使用）
+                score = simpleEvaluate(board);
+            }
             tt.put(hash, 0, score, TTEntry.EXACT, null);
             return new SearchResult(null, score);
         }
@@ -589,18 +530,13 @@ public class ChessEngine {
         List<Move> moves = getAllValidMoves(board, color);
         
         if (moves.isEmpty()) {
-            // 检查是否被将死
             if (isKingInCheck(board, color)) {
-                // 被将死，返回极低分数
                 return new SearchResult(null, color.equals("red") ? -100000 : 100000);
             }
-            // 无子可动，和棋
             tt.put(hash, depth, 0, TTEntry.EXACT, null);
             return new SearchResult(null, 0);
         }
         
-        // 走法排序优化剪枝
-        // 优先使用置换表中保存的好走法
         if (ttEntry != null && ttEntry.move != null) {
             moves = prioritizeMove(moves, ttEntry.move);
         }
@@ -620,11 +556,9 @@ public class ChessEngine {
                     bestMove = move;
                 }
                 alpha = Math.max(alpha, score);
-                if (beta <= alpha) {
-                    break; // 剪枝
-                }
+                if (beta <= alpha) break;
             }
-            // 存入置换表
+            
             if (maxScore <= alpha) {
                 tt.put(hash, depth, maxScore, TTEntry.BETA, bestMove);
             } else if (maxScore >= beta) {
@@ -645,11 +579,9 @@ public class ChessEngine {
                     bestMove = move;
                 }
                 beta = Math.min(beta, score);
-                if (beta <= alpha) {
-                    break; // 剪枝
-                }
+                if (beta <= alpha) break;
             }
-            // 存入置换表
+            
             if (minScore <= alpha) {
                 tt.put(hash, depth, minScore, TTEntry.BETA, bestMove);
             } else if (minScore >= beta) {
@@ -661,9 +593,6 @@ public class ChessEngine {
         }
     }
     
-    /**
-     * 优先使用指定走法
-     */
     private List<Move> prioritizeMove(List<Move> moves, Move priorityMove) {
         List<Move> result = new ArrayList<>();
         result.add(priorityMove);
@@ -675,55 +604,40 @@ public class ChessEngine {
         return result;
     }
     
-    /**
-     * 走法排序：优先搜索好的走法，提高剪枝效率
-     */
     private List<Move> orderMoves(ChessBoard board, List<Move> moves, String color) {
         List<ScoredMove> scoredMoves = new ArrayList<>();
         
         for (Move move : moves) {
             int score = 0;
-            // 吃子得分
             if (move.getCaptured() != null && !move.getCaptured().isEmpty()) {
                 score += PIECE_VALUES.getOrDefault(move.getCaptured(), 0);
             }
-            // 将军加分
             ChessBoard testBoard = makeMove(board, move, color);
             String enemyColor = color.equals("red") ? "black" : "red";
             if (isKingInCheck(testBoard, enemyColor)) {
                 score += 50;
             }
-            // 推进兵卒加分
             String piece = move.getPiece();
             if ((piece.equals("兵") && move.getToX() < move.getFromX()) ||
                 (piece.equals("卒") && move.getToX() > move.getFromX())) {
                 score += 10;
             }
+            if ((piece.equals("車") && move.getFromY() == 0 && move.getToY() != 0) ||
+                (piece.equals("車") && move.getFromY() == 8 && move.getToY() != 8)) {
+                score += 20;
+            }
             scoredMoves.add(new ScoredMove(move, score));
         }
         
-        // 降序排序
         scoredMoves.sort((a, b) -> Integer.compare(b.score, a.score));
         
-        List<OrderedMove> orderedMoves = new ArrayList<>();
-        for (int i = 0; i < scoredMoves.size(); i++) {
-            orderedMoves.add(new OrderedMove(scoredMoves.get(i).move, i));
-        }
-        
-        // 按原始顺序返回，但前面是好的走法
         return scoredMoves.stream().map(s -> s.move).toList();
     }
     
-    /**
-     * 获取最佳走法提示（用于显示给玩家）
-     */
     public Move getHint(ChessBoard board, String color) {
         return alphaBetaSearch(board, color, 2, Integer.MIN_VALUE, Integer.MAX_VALUE).move;
     }
     
-    /**
-     * 搜索结果内部类
-     */
     private static class SearchResult {
         Move move;
         int score;
@@ -734,9 +648,6 @@ public class ChessEngine {
         }
     }
     
-    /**
-     * 带分数的走法
-     */
     private static class ScoredMove {
         Move move;
         int score;
@@ -747,47 +658,26 @@ public class ChessEngine {
         }
     }
     
-    /**
-     * 排序后的走法（用于保持稳定性）
-     */
-    private static class OrderedMove {
-        Move move;
-        int order;
-        
-        OrderedMove(Move move, int order) {
-            this.move = move;
-            this.order = order;
-        }
-    }
-    
-    // 保留原有的简单随机AI以兼容旧代码
     public Move getBestMove() {
         return getBestMove(new ChessBoard(), "black");
     }
     
-    // ========== 置换表（Transposition Table）============
-    // 用于缓存已经搜索过的局面，避免重复搜索
-    private static final int TT_SIZE = 1 << 20; // 1M entry
+    // 置换表
+    private static final int TT_SIZE = 1 << 20;
     private final TranspositionTable tt = new TranspositionTable(TT_SIZE);
     
-    /**
-     * 置换表条目
-     */
     private static class TTEntry {
-        int hash;       // 局面哈希值
-        short depth;    // 搜索深度
-        byte type;      // 类型：EXACT, ALPHA, BETA
-        int value;      // 评估值
-        Move move;      // 最佳走法
+        int hash;
+        short depth;
+        byte type;
+        int value;
+        Move move;
         
         static final byte EXACT = 0;
         static final byte ALPHA = 1;
         static final byte BETA = 2;
     }
     
-    /**
-     * 置换表实现
-     */
     private static class TranspositionTable {
         private final TTEntry[] table;
         
@@ -803,7 +693,6 @@ public class ChessEngine {
             int index = hash & (table.length - 1);
             TTEntry entry = table[index];
             
-            // 只有当新结果更深或者值更好时才替换
             if (entry == null || entry.depth <= depth || type == TTEntry.EXACT) {
                 table[index] = new TTEntry();
                 table[index].hash = hash;
@@ -819,9 +708,6 @@ public class ChessEngine {
         }
     }
     
-    /**
-     * 计算局面的Zobrist哈希值
-     */
     private int zobristHash(ChessBoard board) {
         int hash = 0;
         String[][] b = board.getBoard();
@@ -835,16 +721,12 @@ public class ChessEngine {
                 }
             }
         }
-        // 加上回合信息
         if (board.getCurrentTurn().equals("red")) {
             hash ^= ZOBRIST_TURN;
         }
         return hash;
     }
     
-    /**
-     * 获取棋子索引
-     */
     private int getPieceIndex(String piece, boolean isRed) {
         return switch (piece) {
             case "帥", "將" -> 0;
@@ -858,7 +740,6 @@ public class ChessEngine {
         };
     }
     
-    // Zobrist表 - 预计算随机数
     private static final int[][][] ZOBRIST_PIECE = new int[10][9][8];
     private static final int ZOBRIST_TURN;
     
@@ -874,19 +755,38 @@ public class ChessEngine {
         ZOBRIST_TURN = rand.nextInt();
     }
     
-    /**
-     * 清除置换表（每步棋后调用）
-     */
     public void clearTranspositionTable() {
         tt.clear();
     }
     
-    // 检测指定颜色的王是否被将军
+    /**
+     * 简单评估函数（当analysisService未注入时使用）
+     */
+    private int simpleEvaluate(ChessBoard board) {
+        String[][] b = board.getBoard();
+        boolean[][] isRed = board.getIsRed();
+        int score = 0;
+        
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (b[i][j] != null) {
+                    int value = PIECE_VALUES.getOrDefault(b[i][j], 0);
+                    if (isRed[i][j]) {
+                        score += value;
+                    } else {
+                        score -= value;
+                    }
+                }
+            }
+        }
+        
+        return score;
+    }
+    
     public boolean isKingInCheck(ChessBoard board, String color) {
         String[][] b = board.getBoard();
         boolean[][] isRed = board.getIsRed();
         
-        // 找到指定颜色的王的位置
         String kingPiece = color.equals("red") ? "帥" : "將";
         int kingX = -1, kingY = -1;
         
@@ -901,9 +801,8 @@ public class ChessEngine {
             if (kingX >= 0) break;
         }
         
-        if (kingX < 0) return false; // 王不存在
+        if (kingX < 0) return false;
         
-        // 检查敌方棋子是否能攻击到王
         String enemyColor = color.equals("red") ? "black" : "red";
         
         for (int i = 0; i < 10; i++) {
@@ -916,6 +815,96 @@ public class ChessEngine {
                         }
                     }
                 }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * 检查是否将死
+     */
+    public boolean isCheckmate(ChessBoard board, String color) {
+        return isKingInCheck(board, color) && getAllValidMoves(board, color).isEmpty();
+    }
+    
+    /**
+     * 检查是否困毙
+     */
+    public boolean isStalemate(ChessBoard board, String color) {
+        return !isKingInCheck(board, color) && getAllValidMoves(board, color).isEmpty();
+    }
+    
+    /**
+     * 检查是否和棋（三次重复局面）
+     */
+    public boolean isDrawByRepetition(List<String> positionHistory, String currentPos) {
+        int count = 0;
+        for (String pos : positionHistory) {
+            if (pos.equals(currentPos)) {
+                count++;
+            }
+        }
+        return count >= 3;
+    }
+    
+    /**
+     * 生成局面签名
+     */
+    public String generatePositionSignature(ChessBoard board) {
+        StringBuilder sb = new StringBuilder();
+        String[][] b = board.getBoard();
+        boolean[][] isRed = board.getIsRed();
+        
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (b[i][j] != null) {
+                    sb.append(b[i][j]).append(isRed[i][j] ? "R" : "B").append(i).append(j);
+                }
+            }
+        }
+        sb.append("|").append(board.getCurrentTurn());
+        return sb.toString();
+    }
+    
+    /**
+     * 检查是否长捉（同一棋子连续追捉对方价值最高的棋子）
+     */
+    public boolean isLongCapture(List<Move> recentMoves, int maxTurns) {
+        if (recentMoves.size() < maxTurns * 2) return false;
+        
+        Move lastMove = recentMoves.get(recentMoves.size() - 1);
+        String lastPiece = lastMove.getPiece();
+        int lastToX = lastMove.getToX();
+        int lastToY = lastMove.getToY();
+        
+        int consecutiveChases = 1;
+        
+        for (int i = recentMoves.size() - 3; i >= 0; i -= 2) {
+            Move m = recentMoves.get(i);
+            if (m.getPiece().equals(lastPiece) && m.getToX() == lastToX && m.getToY() == lastToY) {
+                consecutiveChases++;
+            } else {
+                break;
+            }
+        }
+        
+        return consecutiveChases >= maxTurns;
+    }
+    
+    /**
+     * 检查是否长兑（双方不断进行相同的兑换）
+     */
+    public boolean isLongExchange(ChessBoard board, List<Move> recentMoves) {
+        if (recentMoves.size() < 4) return false;
+        
+        Move last = recentMoves.get(recentMoves.size() - 1);
+        Move prev = recentMoves.get(recentMoves.size() - 2);
+        
+        // 检查是否互相吃子
+        if (last.getCaptured() != null && prev.getCaptured() != null) {
+            if (last.getCaptured().equals(prev.getPiece()) && prev.getCaptured().equals(last.getPiece())) {
+                return true;
             }
         }
         
