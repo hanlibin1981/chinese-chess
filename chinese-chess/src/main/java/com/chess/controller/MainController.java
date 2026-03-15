@@ -172,6 +172,20 @@ public class MainController {
             return "redirect:/";
         }
 
+        // 检查游戏是否已开始（等待中的对局不能观战）
+        if ("waiting".equals(game.getStatus())) {
+            // 只有游戏参与者可以访问（红方或黑方）
+            boolean isPlayer = (user != null && (
+                (game.getPlayerRed() != null && game.getPlayerRed().equals(user.getId())) ||
+                (game.getPlayerBlack() != null && game.getPlayerBlack().equals(user.getId()))
+            ));
+            
+            if (!isPlayer) {
+                // 不是参与者，重定向到首页并提示
+                return "redirect:/?error=waiting";
+            }
+        }
+
         // 人机对战也要求先登录
         if (user == null) {
             return "redirect:/login?redirect=/game/" + id;
