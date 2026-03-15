@@ -314,6 +314,7 @@ public class ChessGameHandler {
                 ));
             }
             
+            // 检查将死
             if (isGameOver(state.board, "red")) {
                 state.status = "finished";
                 game.setStatus("finished");
@@ -495,6 +496,13 @@ public class ChessGameHandler {
                 state.moveHistory.remove(state.moveHistory.size() - 1);
             }
             
+            // 撤销局面历史（用于三次重复检测）
+            List<String> history = positionHistory.get(gameId);
+            if (history != null && history.size() >= 2) {
+                history.remove(history.size() - 1);
+                history.remove(history.size() - 1);
+            }
+            
             game.setPgn(gameService.boardToPgn(state.board));
             gameService.saveGame(game);
             
@@ -514,6 +522,13 @@ public class ChessGameHandler {
             }
             if (!state.moveHistory.isEmpty()) {
                 state.moveHistory.remove(state.moveHistory.size() - 1);
+            }
+            
+            // 撤销局面历史（用于三次重复检测）
+            List<String> history = positionHistory.get(gameId);
+            if (history != null && history.size() >= 2) {
+                history.remove(history.size() - 1);
+                history.remove(history.size() - 1);
             }
             
             state.undoRequested = false;

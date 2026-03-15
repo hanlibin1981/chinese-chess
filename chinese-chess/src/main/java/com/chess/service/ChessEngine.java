@@ -312,6 +312,7 @@ public class ChessEngine {
         boolean isRed = board.getIsRed()[x][y];
         int forward = isRed ? -1 : 1;
         
+        // 前进
         int nx = x + forward;
         if (nx >= 0 && nx < 10) {
             if (b[nx][y] == null || !isSameSide(board, x, y, nx, y)) {
@@ -319,13 +320,20 @@ public class ChessEngine {
             }
         }
         
+        // 过河后可左右走
         boolean crossed = isRed ? (x <= 4) : (x >= 5);
         if (crossed) {
-            if (y > 0 && (b[x][y-1] == null || !isSameSide(board, x, y, x, y-1))) {
-                moves.add(new Move(x, y, x, y-1, piece));
+            // 左走
+            if (y > 0) {
+                if (b[x][y-1] == null || !isSameSide(board, x, y, x, y-1)) {
+                    moves.add(new Move(x, y, x, y-1, piece));
+                }
             }
-            if (y < 8 && (b[x][y+1] == null || !isSameSide(board, x, y, x, y+1))) {
-                moves.add(new Move(x, y, x, y+1, piece));
+            // 右走
+            if (y < 8) {
+                if (b[x][y+1] == null || !isSameSide(board, x, y, x, y+1)) {
+                    moves.add(new Move(x, y, x, y+1, piece));
+                }
             }
         }
         return moves;
@@ -739,8 +747,8 @@ public class ChessEngine {
     private static final int ZOBRIST_TURN;
     
     static {
-        // 使用时间种子确保每次运行生成不同的Zobrist表
-        Random rand = new Random(System.currentTimeMillis());
+        // 使用固定种子确保每次运行生成相同的Zobrist表，保证置换表一致性
+        Random rand = new Random(12345678);
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 9; j++) {
                 for (int k = 0; k < 8; k++) {
@@ -748,7 +756,7 @@ public class ChessEngine {
                 }
             }
         }
-        ZOBRIST_TURN = rand.nextInt();
+        ZOBRIST_TURN = 987654321;
     }
     
     public void clearTranspositionTable() {
