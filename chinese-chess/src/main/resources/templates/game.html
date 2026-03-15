@@ -20,6 +20,20 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             overflow: visible;
         }
+        .board-wrapper { display: inline-block; margin: 20px auto; width: 560px; }
+        .ai-start-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            border-radius: 4px;
+        }
+        .ai-start-box { text-align: center; }
+        .ai-start-overlay .btn-primary { background: #e94560; border: none; }
+        .ai-start-overlay .btn-primary:hover { background: #ff6b6b; }
         .chess-cell {
             position: absolute;
             width: 60px;
@@ -63,6 +77,16 @@
         .hint-to { 
             box-shadow: 0 0 15px 5px #ffff00 !important;
             animation: pulse 1s infinite;
+        }
+        
+        /* 最新落子光环 */
+        .last-move {
+            box-shadow: 0 0 10px 4px #00ff00, 0 0 20px 8px rgba(0, 255, 0, 0.4) !important;
+            animation: glowPulse 1.5s ease-in-out infinite;
+        }
+        @keyframes glowPulse {
+            0%, 100% { box-shadow: 0 0 10px 4px #00ff00, 0 0 20px 8px rgba(0, 255, 0, 0.4); }
+            50% { box-shadow: 0 0 12px 5px #00ff00, 0 0 22px 10px rgba(0, 255, 0, 0.3); }
         }
         @keyframes pulse {
             0% { opacity: 1; }
@@ -264,10 +288,26 @@
                             <span th:if="${game.playerBlack == user?.id}" class="badge bg-dark">你</span>
                         </div>
                     </div>
+                    <!-- 分享按钮 -->
+                    <div class="mt-2" id="shareSection" style="display: none;">
+                        <button class="btn btn-sm btn-outline-info" onclick="shareGame()">
+                            🔗 复制链接邀请对手
+                        </button>
+                        <span id="shareMsg" class="text-success ms-2" style="display: none;">已复制!</span>
+                    </div>
                 </div>
                 
-                <div class="chess-board" id="board">
-                    <!-- 棋盘将由JS生成 -->
+                <!-- 人机对战时未点击开始前显示遮罩，禁止操作 -->
+                <div class="board-wrapper" style="position: relative;">
+                    <div class="chess-board" id="board">
+                        <!-- 棋盘将由JS生成 -->
+                    </div>
+                    <div id="aiStartOverlay" class="ai-start-overlay" th:if="${game.isAi}">
+                        <div class="ai-start-box">
+                            <p class="mb-3 text-white">点击下方按钮开始与 AI 对战</p>
+                            <button type="button" class="btn btn-primary btn-lg" onclick="startAiGame()">开始</button>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- 局面分析面板 -->
@@ -339,7 +379,17 @@
                 </div>
                 
                 <div class="game-info mt-3">
-                    <h5>👀 观战者</h5>
+                    <h5>💬 聊天</h5>
+                    <div id="chatMessages" style="max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; margin-bottom: 8px;">
+                        <p class="text-muted" style="font-size: 12px;">暂无消息</p>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <input type="text" id="chatInput" placeholder="发送消息..." 
+                               style="flex: 1; padding: 5px; border-radius: 3px; border: 1px solid #ddd;"
+                               onkeypress="if(event.key==='Enter')sendChat()">
+                        <button class="btn btn-sm btn-primary" onclick="sendChat()">发送</button>
+                    </div>
+                </div>
                     <div class="spectators" id="spectators">
                         <p class="text-muted">暂无观战者</p>
                     </div>
@@ -476,23 +526,83 @@
         
         const gameId = /*[[${game.id}]]*/ 0;
         const userId = /*[[${user?.id}]]*/ null;
-        const playerRed = /*[[${game.playerRed}]]*/ null;
-        const playerBlack = /*[[${game.playerBlack}]]*/ null;
+        let playerRed = /*[[${game.playerRed}]]*/ null;
+        let playerBlack = /*[[${game.playerBlack}]]*/ null;
         const isAi = /*[[${game.isAi}]]*/ false;
+        let gameStatus = /*[[${game.status}]]*/ 'waiting';
+        /** 人机对战：未点击「开始」前为 false，禁止走棋 */
+        let aiGameStarted = false;
         
         let stompClient = null;
         let selectedPiece = null;
         let currentBoard = null;
         let myColor = null;
         
-        // 确定我的颜色 - 玩家总是红方（人机模式）
-        if (isAi) {
-            myColor = 'red';
-        } else if (userId === playerRed) {
-            myColor = 'red';
-        } else if (userId === playerBlack) {
-            myColor = 'black';
+        // 如果在等待对手，显示分享按钮（用字符串比较避免类型不一致）
+        if (gameStatus === 'waiting' && !isAi && userId != null && String(userId) === String(playerRed)) {
+            document.getElementById('shareSection').style.display = 'block';
         }
+        
+        // 发送聊天消息
+        function sendChat() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            stompClient.send("/app/game/chat", {}, JSON.stringify({
+                gameId: gameId,
+                userId: userId,
+                message: message
+            }));
+            input.value = '';
+        }
+        
+        // 添加聊天消息到界面
+        function addChatMessage(data) {
+            const container = document.getElementById('chatMessages');
+            const msgDiv = document.createElement('div');
+            msgDiv.style.marginBottom = '5px';
+            msgDiv.style.fontSize = '12px';
+            
+            const colorSpan = data.color === 'red' ? '🔴' : '⚫';
+            msgDiv.innerHTML = `<strong>${colorSpan} ${data.username}:</strong> ${escapeHtml(data.message)}`;
+            
+            // 移除"暂无消息"提示
+            const emptyMsg = container.querySelector('.text-muted');
+            if (emptyMsg) emptyMsg.remove();
+            
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // HTML转义
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // 确定我的颜色
+        // 人机模式：玩家总是红方
+        // 人人模式：根据 playerRed 和 playerBlack 判断（统一用 String 比较避免 number/string 不一致）
+        function updateMyColor() {
+            if (isAi) {
+                myColor = 'red';
+                return;
+            }
+            if (userId == null) return;
+            if (playerRed != null && String(userId) === String(playerRed)) {
+                myColor = 'red';
+                return;
+            }
+            if (playerBlack != null && String(userId) === String(playerBlack)) {
+                myColor = 'black';
+                return;
+            }
+            if (gameStatus === 'waiting') console.log('等待对手加入...');
+        }
+        updateMyColor();
+        console.log('初始颜色判断: userId=' + userId + ', playerRed=' + playerRed + ', playerBlack=' + playerBlack + ', myColor=' + myColor);
         
         // 初始化棋盘
         function initBoard() {
@@ -573,6 +683,7 @@
         }
         
         function addPalaceLines(board, row, colStart, colEnd, offset = 10) {
+            // 两条对角斜线
             const positions = [
                 [row, colStart, row + 2, colEnd],
                 [row + 2, colStart, row, colEnd]
@@ -599,23 +710,42 @@
         
         function renderBoard(boardData) {
             currentBoard = boardData;
+            
+            // 处理 WebSocket 返回的数据格式：boardData 为 ChessBoard 对象 { board, isRed, currentTurn, moves }
+            const boardArray = boardData.board;
+            const isRedData = boardData.isRed || [];
+            
+            // 如果数据无效，不渲染
+            if (!boardArray) return;
+            
             const cells = document.querySelectorAll('.chess-cell');
             cells.forEach(cell => {
                 cell.innerHTML = '';
-                cell.classList.remove('selected', 'valid-move', 'valid-capture');
+                cell.classList.remove('selected', 'valid-move', 'valid-capture', 'last-move');
             });
             
-            const board = boardData.board;
-            const isRedData = boardData.isRed || [];
+            // 获取走法历史
+            const moves = boardData.moves || [];
+            let lastMove = null;
+            if (moves.length > 0) {
+                lastMove = moves[moves.length - 1];
+            }
+            
             for (let i = 0; i < 10; i++) {
                 for (let j = 0; j < 9; j++) {
-                    const piece = board[i][j];
+                    const piece = boardArray[i][j];
                     if (piece) {
                         const cell = document.querySelector(`.chess-cell[data-x="${i}"][data-y="${j}"]`);
                         const pieceDiv = document.createElement('div');
                         // 使用 isRed 数组来判断棋子颜色
                         const isPieceRed = isRedData[i] && isRedData[i][j];
                         pieceDiv.className = 'chess-piece ' + (isPieceRed ? 'piece-red' : 'piece-black');
+                        
+                        // 最新落子添加绿色光环
+                        if (lastMove && lastMove.toX === i && lastMove.toY === j) {
+                            pieceDiv.classList.add('last-move');
+                        }
+                        
                         // 棋子名称就是piece本身
                         pieceDiv.textContent = piece;
                         cell.appendChild(pieceDiv);
@@ -626,7 +756,8 @@
             // 更新回合指示
             const turnIndicator = document.getElementById('turnIndicator');
             const turnText = document.getElementById('turnText');
-            if (boardData.currentTurn === 'red') {
+            const currentTurn = boardData.currentTurn || 'red';
+            if (currentTurn === 'red') {
                 turnIndicator.className = 'turn-indicator turn-red';
                 turnText.textContent = '红方回合';
             } else {
@@ -639,8 +770,55 @@
             document.getElementById('blackPlayer').textContent = isAi ? 'AI' : '[[${game.blackUsername}]]';
         }
         
+        function startAiGame() {
+            // 隐藏覆盖层
+            aiGameStarted = true;
+            const el = document.getElementById('aiStartOverlay');
+            if (el) el.style.display = 'none';
+            
+            console.log('startAiGame called, stompClient:', stompClient);
+            
+            // 等待一小段时间确保WebSocket连接已建立
+            setTimeout(function() {
+                console.log('Attempting to send start message, stompClient.connected:', stompClient && stompClient.connected);
+                
+                if (stompClient && stompClient.connected) {
+                    stompClient.send("/app/game/start", {}, JSON.stringify({
+                        gameId: gameId
+                    }));
+                    console.log('Sent game start message');
+                } else {
+                    console.warn('WebSocket not connected, trying alternative...');
+                    // 备用方案：通过REST API开始游戏
+                    fetch('/game/start/' + gameId, { method: 'POST' })
+                        .then(res => res.json())
+                        .then(data => {
+                            console.log('REST API response:', data);
+                            if (data.success) {
+                                window.location.reload();
+                            }
+                        })
+                        .catch(err => console.error('REST API error:', err));
+                }
+            }, 1000);
+        }
+        
         function onCellClick(x, y) {
-            if (!myColor || !currentBoard) return;
+            // 人机对战：未点击开始按钮不能走棋
+            if (isAi && !aiGameStarted) {
+                alert('请先点击「开始」按钮开始对战');
+                return;
+            }
+            // 检查游戏状态
+            if (gameStatus === 'waiting') {
+                alert('等待对手加入...请分享游戏链接给朋友');
+                return;
+            }
+            if (!myColor) {
+                console.log('未确定我的颜色，请等待...');
+                return;
+            }
+            if (!currentBoard) return;
             if (currentBoard.currentTurn !== myColor) return;
             
             const piece = currentBoard.board[x][y];
@@ -704,7 +882,10 @@
         
         function surrender() {
             if (confirm('确定要认输吗？')) {
-                // 发送认输消息
+                stompClient.send("/app/game/resign", {}, JSON.stringify({
+                    gameId: gameId,
+                    userId: userId
+                }));
             }
         }
         
@@ -986,18 +1167,39 @@
         }
         
         // WebSocket连接
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        let reconnectTimer = null;
+        
         function connect() {
+            // 清除之前的重连定时器
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+            
             const socket = new SockJS('/ws/chess');
             stompClient = Stomp.over(socket);
             
             stompClient.connect({}, function(frame) {
                 console.log('Connected');
+                reconnectAttempts = 0; // 重置重连次数
+                
+                // 显示连接状态
+                showConnectionStatus('connected');
                 
                 // 加入游戏
                 stompClient.send("/app/game/join", {}, JSON.stringify({
                     gameId: gameId,
                     userId: userId
                 }));
+                
+                // 设置断开连接回调
+                stompClient.ws.onclose = function() {
+                    console.log('WebSocket disconnected');
+                    showConnectionStatus('disconnected');
+                    handleReconnect();
+                };
                 
                 // 订阅游戏消息
                 stompClient.subscribe('/topic/game/' + gameId, function(message) {
@@ -1006,6 +1208,16 @@
                     
                     if (data.type === 'state' || data.type === 'move') {
                         const newBoard = data.board || data;
+                        
+                        // 同步游戏状态与双方玩家 ID（人人对战时黑方身份依赖此更新）
+                        if (data.status) gameStatus = data.status;
+                        if (data.redPlayer != null) playerRed = data.redPlayer;
+                        if (data.blackPlayer != null) playerBlack = data.blackPlayer;
+                        updateMyColor();
+                        // 显示用户名（后端若带 redUsername/blackUsername 则用）
+                        if (data.redUsername != null) document.getElementById('redPlayer').textContent = data.redUsername;
+                        if (data.blackUsername != null) document.getElementById('blackPlayer').textContent = data.blackUsername;
+                        else if (isAi) document.getElementById('blackPlayer').textContent = 'AI';
                         
                         // 首次收到棋盘数据时启动计时器
                         if (!currentBoard && newBoard) {
@@ -1072,6 +1284,9 @@
                     } else if (data.type === 'undoAccepted') {
                         alert('悔棋成功');
                         renderBoard(data.board);
+                    } else if (data.type === 'chat') {
+                        // 聊天消息
+                        addChatMessage(data);
                     } else if (data.type === 'error') {
                         alert(data.message);
                     } else if (data.type === 'restarted') {
@@ -1079,10 +1294,15 @@
                         renderBoard(data.board);
                         updateMoveList(data.board);
                         startGameTimer(); // 重新开始时重置并启动计时器
-                        alert('游戏重新开始！');
+                        if (isAi) {
+                            aiGameStarted = false;
+                            var ov = document.getElementById('aiStartOverlay');
+                            if (ov) ov.style.display = 'flex';
+                        }
+                        alert('游戏重新开始！请点击「开始」继续对战。');
                     } else if (data.type === 'hint') {
-                        // 显示走法提示
-                        showHint(data.hintMove);
+                        // 显示走法提示（后端发送扁平的 fromX/fromY/toX/toY）
+                        showHint({ fromX: data.fromX, fromY: data.fromY, toX: data.toX, toY: data.toY, piece: data.piece || '' });
                     } else if (data.type === 'difficultyChanged') {
                         // 难度已更改
                         document.getElementById('difficultyDisplay').textContent = data.difficulty;
@@ -1237,6 +1457,71 @@
                 }
             }
         }
+        
+        // 处理WebSocket重连
+        function handleReconnect() {
+            if (reconnectAttempts >= maxReconnectAttempts) {
+                console.log('已达到最大重连次数，停止重连');
+                showConnectionStatus('failed');
+                alert('连接已断开，请刷新页面重新进入游戏');
+                return;
+            }
+            
+            reconnectAttempts++;
+            const delay = Math.min(3000 * reconnectAttempts, 15000); // 递增延迟，最多15秒
+            
+            console.log(`${delay/1000}秒后尝试重连 (${reconnectAttempts}/${maxReconnectAttempts})`);
+            showConnectionStatus('reconnecting');
+            
+            reconnectTimer = setTimeout(function() {
+                console.log('尝试重连...');
+                connect();
+            }, delay);
+        }
+        
+        // 显示连接状态
+        function showConnectionStatus(status) {
+            let statusEl = document.getElementById('connectionStatus');
+            if (!statusEl) {
+                statusEl = document.createElement('div');
+                statusEl.id = 'connectionStatus';
+                statusEl.style.cssText = 'position:fixed;top:10px;right:10px;padding:10px 20px;border-radius:5px;color:white;font-weight:bold;z-index:9999;';
+                document.body.appendChild(statusEl);
+            }
+            
+            switch(status) {
+                case 'connected':
+                    statusEl.style.backgroundColor = 'green';
+                    statusEl.textContent = '已连接';
+                    setTimeout(() => statusEl.style.display = 'none', 2000);
+                    break;
+                case 'disconnected':
+                    statusEl.style.backgroundColor = 'red';
+                    statusEl.textContent = '连接断开';
+                    statusEl.style.display = 'block';
+                    break;
+                case 'reconnecting':
+                    statusEl.style.backgroundColor = 'orange';
+                    statusEl.textContent = '正在重连...';
+                    statusEl.style.display = 'block';
+                    break;
+                case 'failed':
+                    statusEl.style.backgroundColor = 'darkred';
+                    statusEl.textContent = '连接失败';
+                    statusEl.style.display = 'block';
+                    break;
+            }
+        }
+        
+        // 页面卸载时清理
+        window.onbeforeunload = function() {
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+            }
+            if (stompClient) {
+                stompClient.disconnect();
+            }
+        };
         
         // 初始化
         initBoard();

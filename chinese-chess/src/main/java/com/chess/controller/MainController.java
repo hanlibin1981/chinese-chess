@@ -7,6 +7,7 @@ import com.chess.model.User;
 import com.chess.service.ChessAnalysisService;
 import com.chess.service.GameService;
 import com.chess.service.UserService;
+import com.chess.websocket.ChessGameHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,9 @@ public class MainController {
     @Autowired
     private ChessAnalysisService analysisService;
     
+    @Autowired(required = false)
+    private ChessGameHandler chessGameHandler;
+    
     @Autowired
     private ObjectMapper objectMapper;
     
@@ -47,7 +51,33 @@ public class MainController {
         List<Game> activeGames = gameService.getActiveGames();
         model.addAttribute("activeGames", activeGames);
         
+        // 获取等待中的对战游戏
+        List<Game> waitingGames = gameService.getWaitingGames();
+        model.addAttribute("waitingGames", waitingGames);
+        
         return "index";
+    }
+    
+    /**
+     * 清理所有游戏数据（仅用于测试）
+     */
+    @GetMapping("/admin/cleanup")
+    @ResponseBody
+    public String cleanup() {
+        gameService.deleteAllGames();
+        if (chessGameHandler != null) chessGameHandler.clearAllGameState();
+        return "已清理所有游戏数据";
+    }
+    
+    /**
+     * 清除未完成的对弈（status 为 playing / waiting），保留已结束的棋谱
+     */
+    @GetMapping("/admin/cleanup-unfinished")
+    @ResponseBody
+    public Map<String, Object> cleanupUnfinished() {
+        int deleted = gameService.deleteUnfinishedGames();
+        if (chessGameHandler != null) chessGameHandler.clearAllGameState();
+        return Map.of("success", true, "message", "已清除 " + deleted + " 局未完成对弈", "deleted", deleted);
     }
     
     @GetMapping("/login")
@@ -137,14 +167,19 @@ public class MainController {
     public String gameRoom(@PathVariable Long id, Model model, HttpSession session) {
         User user = (User) session.getAttribute("user");
         Game game = gameService.findById(id);
-        
+
         if (game == null) {
             return "redirect:/";
         }
-        
+
+        // 人机对战也要求先登录
+        if (user == null) {
+            return "redirect:/login?redirect=/game/" + id;
+        }
+
         model.addAttribute("game", game);
         model.addAttribute("user", user);
-        
+
         return "game";
     }
     

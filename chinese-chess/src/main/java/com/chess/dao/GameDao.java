@@ -25,6 +25,13 @@ public interface GameDao {
             "FROM games g " +
             "LEFT JOIN users u1 ON g.player_red = u1.id " +
             "LEFT JOIN users u2 ON g.player_black = u2.id " +
+            "WHERE g.status = 'waiting' AND g.is_ai = false ORDER BY g.created_at DESC")
+    List<Game> findWaitingGames();
+    
+    @Select("SELECT g.*, u1.username as red_username, u2.username as black_username " +
+            "FROM games g " +
+            "LEFT JOIN users u1 ON g.player_red = u1.id " +
+            "LEFT JOIN users u2 ON g.player_black = u2.id " +
             "WHERE g.player_red = #{userId} OR g.player_black = #{userId} " +
             "ORDER BY g.created_at DESC")
     List<Game> findByUserId(Long userId);
@@ -46,4 +53,11 @@ public interface GameDao {
     
     @Update("UPDATE games SET player_black = #{playerBlack}, status = 'playing' WHERE id = #{id}")
     int joinGame(@Param("id") Long id, @Param("playerBlack") Long playerBlack);
+    
+    @Delete("DELETE FROM games")
+    void deleteAll();
+
+    /** 仅删除未完成的对弈（status 为 playing 或 waiting） */
+    @Delete("DELETE FROM games WHERE status IN ('playing', 'waiting')")
+    int deleteUnfinished();
 }

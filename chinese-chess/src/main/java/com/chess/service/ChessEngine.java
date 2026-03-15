@@ -432,72 +432,44 @@ public class ChessEngine {
     }
     
     private Move getHardMove(ChessBoard board, String color) {
-        List<Move> moves = getAllValidMoves(board, color);
-        moves = orderMoves(board, moves, color);
-        
-        Move bestMove = null;
-        int bestScore = color.equals("red") ? Integer.MIN_VALUE : Integer.MAX_VALUE;
-        int alpha = Integer.MIN_VALUE;
-        int beta = Integer.MAX_VALUE;
-        
-        for (Move move : moves) {
-            ChessBoard newBoard = makeMove(board, move, color);
-            int score;
-            
-            if (color.equals("red")) {
-                score = alphaBetaSearch(newBoard, "black", currentDifficulty.getSearchDepth() - 1, alpha, beta).score;
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMove = move;
-                }
-                alpha = Math.max(alpha, score);
-            } else {
-                score = alphaBetaSearch(newBoard, "red", currentDifficulty.getSearchDepth() - 1, alpha, beta).score;
-                if (score < bestScore) {
-                    bestScore = score;
-                    bestMove = move;
-                }
-                beta = Math.min(beta, score);
-            }
-            
-            if (beta <= alpha) break;
-        }
-        
-        return bestMove != null ? bestMove : (moves.isEmpty() ? null : moves.get(0));
+        // 困难难度使用3层搜索
+        return alphaBetaSearch(board, color, currentDifficulty.getSearchDepth(), Integer.MIN_VALUE, Integer.MAX_VALUE).move;
     }
-    
+
     private Move getExpertMove(ChessBoard board, String color) {
+        // 大师难度使用4层搜索，并启用更激进的走法排序
         List<Move> moves = getAllValidMoves(board, color);
         moves = orderMoves(board, moves, color);
-        
+
         Move bestMove = null;
         int bestScore = color.equals("red") ? Integer.MIN_VALUE : Integer.MAX_VALUE;
         int alpha = Integer.MIN_VALUE;
         int beta = Integer.MAX_VALUE;
-        
+
         for (Move move : moves) {
             ChessBoard newBoard = makeMove(board, move, color);
             int score;
-            
+
+            // 大师难度使用指定深度的搜索
             if (color.equals("red")) {
-                score = alphaBetaSearch(newBoard, "black", currentDifficulty.getSearchDepth() - 1, alpha, beta).score;
+                score = alphaBetaSearch(newBoard, "black", currentDifficulty.getSearchDepth(), alpha, beta).score;
                 if (score > bestScore) {
                     bestScore = score;
                     bestMove = move;
                 }
                 alpha = Math.max(alpha, score);
             } else {
-                score = alphaBetaSearch(newBoard, "red", currentDifficulty.getSearchDepth() - 1, alpha, beta).score;
+                score = alphaBetaSearch(newBoard, "red", currentDifficulty.getSearchDepth(), alpha, beta).score;
                 if (score < bestScore) {
                     bestScore = score;
                     bestMove = move;
                 }
                 beta = Math.min(beta, score);
             }
-            
+
             if (beta <= alpha) break;
         }
-        
+
         return bestMove != null ? bestMove : (moves.isEmpty() ? null : moves.get(0));
     }
     
@@ -693,13 +665,36 @@ public class ChessEngine {
             int index = hash & (table.length - 1);
             TTEntry entry = table[index];
             
-            if (entry == null || entry.depth <= depth || type == TTEntry.EXACT) {
+            // 改进的置换表替换策略：
+            // 1. 如果条目为空，直接插入
+            // 2. 如果新搜索深度更深，替换
+            // 3. 如果深度相同但新结果是精确值或Beta截断（说明走法更好），替换
+            // 4. 如果是Alpha截断但旧条目是EXACT，不替换
+            if (entry == null) {
                 table[index] = new TTEntry();
                 table[index].hash = hash;
                 table[index].depth = (short) depth;
                 table[index].value = value;
                 table[index].type = type;
                 table[index].move = move;
+            } else if (depth > entry.depth) {
+                // 更深的搜索结果优先
+                table[index] = new TTEntry();
+                table[index].hash = hash;
+                table[index].depth = (short) depth;
+                table[index].value = value;
+                table[index].type = type;
+                table[index].move = move;
+            } else if (depth == entry.depth) {
+                // 深度相同时，精确结果优先替换，其次是Beta（好的走法）
+                if (type == TTEntry.EXACT || (type == TTEntry.BETA && entry.type != TTEntry.EXACT)) {
+                    table[index] = new TTEntry();
+                    table[index].hash = hash;
+                    table[index].depth = (short) depth;
+                    table[index].value = value;
+                    table[index].type = type;
+                    table[index].move = move;
+                }
             }
         }
         
@@ -744,7 +739,8 @@ public class ChessEngine {
     private static final int ZOBRIST_TURN;
     
     static {
-        Random rand = new Random(123456);
+        // 使用时间种子确保每次运行生成不同的Zobrist表
+        Random rand = new Random(System.currentTimeMillis());
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 9; j++) {
                 for (int k = 0; k < 8; k++) {

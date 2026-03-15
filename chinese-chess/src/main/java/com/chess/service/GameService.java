@@ -23,7 +23,9 @@ public class GameService {
         game.setPlayerRed(playerRed);
         game.setPlayerBlack(null); // null 表示 AI
         game.setIsAi(isAi);
-        game.setStatus("waiting");
+        
+        // 人机对战直接开始，不需要等待对手加入
+        game.setStatus(isAi ? "playing" : "waiting");
         
         ChessBoard board = new ChessBoard();
         try {
@@ -56,6 +58,10 @@ public class GameService {
     
     public List<Game> getActiveGames() {
         return gameDao.findActiveGames();
+    }
+    
+    public List<Game> getWaitingGames() {
+        return gameDao.findWaitingGames();
     }
     
     public List<Game> getUserGames(Long userId) {
@@ -103,5 +109,14 @@ public class GameService {
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
+    }
+    
+    public void deleteAllGames() {
+        gameDao.deleteAll();
+    }
+
+    /** 清除未完成的对弈（playing / waiting），返回删除条数 */
+    public int deleteUnfinishedGames() {
+        return gameDao.deleteUnfinished();
     }
 }

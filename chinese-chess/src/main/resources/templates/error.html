@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>出错了 - 中国象棋</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .card { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); }
+        .card-body { color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="card-body text-center p-4">
+                <h4 class="text-warning mb-3">⚠️ 出错了</h4>
+                <p class="mb-2" th:text="${message}">服务器暂时不可用。</p>
+                <p class="small text-muted mb-3" th:if="${detail}" th:text="${detail}"></p>
+                <a href="/" class="btn btn-primary">返回首页</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

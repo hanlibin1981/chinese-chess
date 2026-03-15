@@ -57,9 +57,13 @@ public class ChessEngineTest {
         ChessBoard board = new ChessBoard();
         
         // 测试简单难度 - 不需要analysisService
+        // 初始局面红方先行，测试黑方(AI)走法
         chessEngine.setDifficulty(ChessEngine.Difficulty.EASY);
         Move easyMove = chessEngine.getBestMove(board, "black");
         assertNotNull(easyMove, "简单难度AI应该返回走法");
+        
+        // 验证走法是从黑方区域出发
+        assertTrue(easyMove.getFromX() <= 4, "黑方棋子应该在0-4行");
         System.out.println("测试2a通过: 简单难度AI走法 = " + easyMove);
     }
     

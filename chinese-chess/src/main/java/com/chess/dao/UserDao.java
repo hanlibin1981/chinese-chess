@@ -25,4 +25,7 @@ public interface UserDao {
     
     @Update("UPDATE users SET draw_count = draw_count + 1 WHERE id = #{id}")
     void addDraw(Long id);
+    
+    @Update("UPDATE users SET password = #{password} WHERE id = #{id}")
+    void updatePassword(Long id, String password);
 }

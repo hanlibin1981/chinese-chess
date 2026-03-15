@@ -1,29 +1,23 @@
-# Maven
+# Java
 target/
-pom.xml.tag
-pom.xml.releaseBackup
-pom.xml.versionsBackup
-pom.xml.next
-release.properties
+*.class
+*.jar
+*.war
 
 # IDE
 .idea/
-*.iml
 .vscode/
-*.swp
-*.swo
+*.iml
+.factorypath
+.settings/
+
+# Logs
+*.log
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-
-# Package Files
-*.jar
-*.war
-*.ear
-
-# Windows reserved name
-nul
+# Temp
+tmpclaude-*/
+*.tmp

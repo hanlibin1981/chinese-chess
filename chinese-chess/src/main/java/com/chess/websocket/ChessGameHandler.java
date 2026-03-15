@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -67,6 +68,8 @@ public class ChessGameHandler {
             this.moveHistory = new CopyOnWriteArrayList<>();
             this.playerTime = new HashMap<>();
             this.timeControlEnabled = false;
+            this.initialTime = 600; // 默认10分钟
+            this.incrementTime = 0;
             playerTime.put("red", 600);
             playerTime.put("black", 600);
         }
@@ -85,12 +88,19 @@ public class ChessGameHandler {
     public void joinGame(Map<String, Object> data) {
         Object gameIdObj = data.get("gameId");
         Object userIdObj = data.get("userId");
-        
-        if (gameIdObj == null || userIdObj == null) return;
-        
+
+        if (gameIdObj == null) return;
+
         Long gameId = Long.parseLong(gameIdObj.toString());
-        Long userId = Long.parseLong(userIdObj.toString());
-        
+        Long userId = null;
+        if (userIdObj != null) {
+            try {
+                userId = Long.parseLong(userIdObj.toString());
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+
         Game game = gameService.findById(gameId);
         if (game == null) return;
         
@@ -101,6 +111,14 @@ public class ChessGameHandler {
             state = new GameState(board, game.getPlayerRed(), blackPlayer);
             gameStates.put(gameId, state);
             positionHistory.put(gameId, new ArrayList<>());
+        } else {
+            // 如果已经有游戏状态，更新玩家信息（处理玩家重新加入的情况）
+            if (game.getPlayerBlack() != null && state.blackPlayer == null) {
+                state.blackPlayer = game.getPlayerBlack();
+            }
+            if (state.status.equals("waiting")) {
+                state.status = "playing";
+            }
         }
         
         Map<String, Object> msg = new HashMap<>();
@@ -109,6 +127,10 @@ public class ChessGameHandler {
         msg.put("currentTurn", state.board.getCurrentTurn());
         msg.put("redPlayer", state.redPlayer);
         msg.put("blackPlayer", state.blackPlayer);
+        msg.put("status", state.status);
+        if (game.getRedUsername() != null) msg.put("redUsername", game.getRedUsername());
+        if (game.getBlackUsername() != null) msg.put("blackUsername", game.getBlackUsername());
+        else if (game.getIsAi() != null && game.getIsAi()) msg.put("blackUsername", "AI");
         messagingTemplate.convertAndSend("/topic/game/" + gameId, msg);
     }
     
@@ -310,7 +332,7 @@ public class ChessGameHandler {
             gameService.saveGame(game);
             
             // 更新计时
-            if (state.timeControlEnabled) {
+            if (state.timeControlEnabled && state.initialTime != null) {
                 if (state.incrementTime != null && state.incrementTime > 0) {
                     Integer redTime = state.playerTime.get("red");
                     if (redTime != null) {
@@ -513,6 +535,85 @@ public class ChessGameHandler {
         }
     }
     
+    /**
+     * 开始人机对战（AI开始走棋）
+     */
+    @MessageMapping("/game/start")
+    public void startGame(Map<String, Object> data) {
+        Long gameId = Long.parseLong(data.get("gameId").toString());
+        handleStartGame(gameId);
+    }
+    
+    /**
+     * REST API 版本的游戏开始
+     */
+    @PostMapping("/game/start/{id}")
+    @ResponseBody
+    public Map<String, Object> startGameRest(@PathVariable Long id) {
+        try {
+            handleStartGame(id);
+            return Map.of("success", true);
+        } catch (Exception e) {
+            return Map.of("success", false, "message", e.getMessage());
+        }
+    }
+    
+    private void handleStartGame(Long gameId) {
+        Game game = gameService.findById(gameId);
+        if (game == null || !game.getIsAi()) return;
+        
+        // 获取当前局面
+        ChessBoard board;
+        try {
+            board = objectMapper.readValue(game.getPgn(), ChessBoard.class);
+        } catch (Exception e) {
+            board = new ChessBoard();
+        }
+        
+        // 确保游戏状态存在
+        GameState state = gameStates.get(gameId);
+        if (state == null) {
+            state = new GameState(board, game.getPlayerRed(), null);
+            gameStates.put(gameId, state);
+        }
+        
+        // 更新游戏状态为进行中
+        if ("waiting".equals(game.getStatus())) {
+            game.setStatus("playing");
+            gameService.saveGame(game);
+        }
+        
+        // 通知前端游戏已开始
+        messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+            "type", "gameStarted", "board", board
+        ));
+        
+        // 如果是AI先手（黑方），让AI走棋
+        if ("black".equals(board.getCurrentTurn())) {
+            // AI走棋
+            Move aiMove = chessEngine.getBestMove(board, "black");
+            if (aiMove != null) {
+                board = chessEngine.makeMove(board, aiMove, "black");
+                
+                // 保存棋谱
+                game.setPgn(gameService.boardToPgn(board));
+                gameService.saveGame(game);
+                
+                // 更新内存状态
+                state.board = board;
+                state.moveHistory.add(aiMove);
+                
+                // 广播AI的走法
+                messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+                    "type", "move",
+                    "move", aiMove,
+                    "board", board,
+                    "currentTurn", board.getCurrentTurn()
+                ));
+            }
+        }
+    }
+    
     @MessageMapping("/game/restart")
     public void restartGame(Map<String, Object> data) {
         Long gameId = Long.parseLong(data.get("gameId").toString());
@@ -536,6 +637,12 @@ public class ChessGameHandler {
         messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
             "type", "restarted", "board", board
         ));
+    }
+    
+    /** 清除内存中的对局状态缓存（配合管理员清理未完成对弈时调用） */
+    public void clearAllGameState() {
+        gameStates.clear();
+        positionHistory.clear();
     }
     
     /**

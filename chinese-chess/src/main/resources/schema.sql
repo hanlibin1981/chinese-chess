@@ -30,7 +30,7 @@ DROP INDEX IF EXISTS idx_games_player ON games;
 CREATE INDEX idx_games_status ON games(status);
 CREATE INDEX idx_games_player ON games(player_red, player_black);
 
--- 默认测试用户 (用户名: hlb, 密码: 123456)
+-- 默认测试用户 (用户名: hlb, 密码: 111111)
 INSERT INTO users(username, password, win_count, lose_count, draw_count) 
-VALUES('hlb', 'e10adc3949ba59abbe56e057f20f883e', 0, 0, 0)
+VALUES('hlb', '96e79218965eb72c92a549dd5a330112', 0, 0, 0)
 ON DUPLICATE KEY UPDATE username=username;

@@ -9,12 +9,17 @@ spring:
   datasource:
     type: com.zaxxer.hikari.HikariDataSource
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:8888/chess?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&pipeName=MySQL
+    # 去掉无效的 pipeName 参数；若用命名管道请改用 socketFactory 与 namedPipePath
+    url: jdbc:mysql://127.0.0.1:8888/chess?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
     username: root
     password: 888888
     hikari:
       maximum-pool-size: 10
       minimum-idle: 5
+      # 连接超时 10 秒，避免 MySQL 不可用时请求一直挂起
+      connection-timeout: 10000
+      # 启动时若连不上数据库则快速失败（毫秒），便于排查
+      initialization-fail-timeout: 5000
   sql:
     init:
       mode: never

@@ -27,6 +27,7 @@
                 <th:block th:if="${user}">
                     <span class="nav-item nav-link" th:text="${user.username}"></span>
                     <a class="nav-item nav-link" href="/games">我的棋谱</a>
+                    <a class="nav-item nav-link" href="/password/change">修改密码</a>
                     <a class="nav-item nav-link" href="/logout">退出</a>
                 </th:block>
                 <th:block th:unless="${user}">
@@ -79,7 +80,7 @@
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label" style="color: #fff;">密码</label>
-                                    <input type="password" name="password" class="form-control" value="123456" required>
+                                    <input type="password" name="password" class="form-control" value="111111" required>
                                 </div>
                                 <button type="submit" class="btn btn-primary w-100">登录</button>
                             </form>
@@ -113,6 +114,33 @@
                                 </div>
                             </div>
                         </div>
+                        
+                        <!-- 等待对手 -->
+                        <div class="col-md-6" th:if="${waitingGames} and not ${waitingGames.empty}">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h4 class="card-title">⏳ 等待对手</h4>
+                                    <div id="waitingGames">
+                                        <div th:each="game : ${waitingGames}" class="card game-item mb-2" 
+                                             style="background: rgba(255,255,255,0.05);">
+                                            <div class="card-body py-2">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <strong th:text="${game.redUsername}">红方</strong>
+                                                        <span class="badge bg-warning text-dark">等待中</span>
+                                                    </div>
+                                                    <button th:if="${user != null and user.id != game.playerRed}" 
+                                                            th:onclick="'joinGame(' + ${game.id} + ')'"
+                                                            class="btn btn-sm btn-success">
+                                                        加入对战
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -136,9 +164,40 @@
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    window.location.href = '/game/' + data.gameId;
+                    if (isAi) {
+                        // 人机对战直接跳转
+                        window.location.href = '/game/' + data.gameId;
+                    } else {
+                        // 人人对战显示等待信息
+                        alert('等待对手加入...请分享游戏链接或等待对手加入');
+                        window.location.href = '/game/' + data.gameId;
+                    }
                 } else {
                     alert(data.message || '创建失败');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('请求失败，请重试');
+            });
+        }
+        
+        function joinGame(gameId) {
+            if (!isLoggedIn) {
+                alert('请先登录');
+                window.location.href = '/login';
+                return;
+            }
+            
+            fetch('/game/join/' + gameId, {
+                method: 'POST'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/game/' + data.gameId;
+                } else {
+                    alert(data.message || '加入失败');
                 }
             })
             .catch(err => {

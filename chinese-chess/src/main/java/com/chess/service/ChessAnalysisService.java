@@ -115,7 +115,7 @@ public class ChessAnalysisService {
         boolean[][] isRed = board.getIsRed();
         int score = 0;
         
-        // 仕位
+        // 仕位 - 必须在九宫格3-5列范围内
         if (b[8][3] != null && b[8][3].equals("仕") && isRed[8][3]) score += 15;
         if (b[8][5] != null && b[8][5].equals("仕") && isRed[8][5]) score += 15;
         if (b[9][4] != null && b[9][4].equals("仕") && isRed[9][4]) score += 10;
@@ -377,7 +377,43 @@ public class ChessAnalysisService {
         gameAnalysis.setGoodMoves(good);
         gameAnalysis.setMistakes(mistake);
         gameAnalysis.setBlunders(blunder);
-        
+
+        // 如果是人机对战，添加AI分析
+        if (isAiGame) {
+            AiAnalysis aiAnalysis = new AiAnalysis();
+            aiAnalysis.setTotalMistakes(mistake);
+            aiAnalysis.setTotalBlunders(blunder);
+            aiAnalysis.setGoodMoves(good + excellent);
+
+            // 生成整体评价
+            if (blunder >= 3) {
+                aiAnalysis.setOverallAssessment("表现不佳，出现多次明显失误");
+            } else if (mistake >= 3) {
+                aiAnalysis.setOverallAssessment("表现一般，有待提高");
+            } else if (excellent >= 5) {
+                aiAnalysis.setOverallAssessment("表现出色！多处精妙走法");
+            } else if (good >= 3) {
+                aiAnalysis.setOverallAssessment("表现良好，稳扎稳打");
+            } else {
+                aiAnalysis.setOverallAssessment("中规中矩");
+            }
+
+            // 生成观察列表
+            List<String> observations = new ArrayList<>();
+            if (blunder > 0) observations.add("注意避免昏招，建议多思考后再落子");
+            if (mistake > 0) observations.add("部分走法可进一步优化");
+            if (excellent > 0) observations.add("有多步精彩好棋，值得学习");
+            if (scoreHistory.size() > 0) {
+                int firstScore = scoreHistory.get(0);
+                int lastScore = scoreHistory.get(scoreHistory.size() - 1);
+                if (lastScore > firstScore + 200) observations.add("局面控制能力不错，最终取得优势");
+                else if (lastScore < firstScore - 200) observations.add("开局不错，但中局或残局处理有待加强");
+            }
+            aiAnalysis.setObservations(observations);
+
+            gameAnalysis.setAiAnalysis(aiAnalysis);
+        }
+
         return gameAnalysis;
     }
     
