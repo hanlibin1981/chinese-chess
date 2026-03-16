@@ -1181,6 +1181,9 @@
             const socket = new SockJS('/ws/chess');
             stompClient = Stomp.over(socket);
             
+            // 配置 STOMP 心跳（每10秒）
+            stompClient.heartbeat = { incoming: 10000, outgoing: 10000 };
+            
             stompClient.connect({}, function(frame) {
                 console.log('Connected');
                 reconnectAttempts = 0; // 重置重连次数
@@ -1255,6 +1258,11 @@
                         }
                     } else if (data.type === 'gameOver') {
                         pauseTimer(); // 游戏结束时停止计时器
+                        // 先刷新棋盘显示最终落子
+                        if (data.board) {
+                            renderBoard(data.board);
+                            updateMoveList(data.board);
+                        }
                         if (data.winner === myColor) {
                             playWinSound();
                         } else {
@@ -1263,6 +1271,11 @@
                         alert('游戏结束！' + (data.winner === 'red' ? '红方' : '黑方') + '获胜！');
                     } else if (data.type === 'checkmate') {
                         pauseTimer(); // 游戏结束时停止计时器
+                        // 先刷新棋盘显示最终落子
+                        if (data.board) {
+                            renderBoard(data.board);
+                            updateMoveList(data.board);
+                        }
                         if (data.winner === myColor) {
                             playWinSound();
                         } else {
@@ -1289,6 +1302,15 @@
                         addChatMessage(data);
                     } else if (data.type === 'error') {
                         alert(data.message);
+                    } else if (data.type === 'gameStarted') {
+                        // 游戏开始（人机对战点击开始按钮后）
+                        gameStatus = 'playing';
+                        if (data.board) {
+                            renderBoard(data.board);
+                            updateMoveList(data.board);
+                            // 首次收到棋盘数据时启动计时器
+                            startGameTimer();
+                        }
                     } else if (data.type === 'restarted') {
                         // 重新开始
                         renderBoard(data.board);

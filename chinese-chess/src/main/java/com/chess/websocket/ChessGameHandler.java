@@ -292,11 +292,28 @@ public class ChessGameHandler {
     
     private void doAiMove(Long gameId, GameState state, Game game) {
         try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {}
-        
-        Move aiMove = chessEngine.getBestMove(state.board, "black");
-        if (aiMove != null) {
+            // 稍作延迟，让人类玩家看到自己的落子
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ignored) {}
+            
+            Move aiMove = chessEngine.getBestMove(state.board, "black");
+            if (aiMove == null) {
+                // AI 无合法走法，视为人类获胜或和棋，不让异常导致服务器崩溃
+                state.status = "finished";
+                game.setStatus("finished");
+                game.setWinner("red");
+                game.setEndedAt(java.time.LocalDateTime.now());
+                gameService.saveGame(game);
+                updateUserStats(game);
+                messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+                    "type", "gameOver",
+                    "winner", "red",
+                    "message", "AI 无子可走，对局结束"
+                ));
+                return;
+            }
+            
             state.history.push(state.board.copy());
             state.moveHistory.add(aiMove);
             
@@ -355,6 +372,21 @@ public class ChessGameHandler {
                 "board", state.board,
                 "currentTurn", state.board.getCurrentTurn()
             ));
+        } catch (Throwable t) {
+            // 捕获 AI 计算中的所有异常，防止 WebSocket 线程异常导致服务退出
+            t.printStackTrace();
+            messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+                "type", "error",
+                "message", "AI 计算出错，对局已终止，请稍后重试"
+            ));
+            if (state != null) {
+                state.status = "finished";
+            }
+            if (game != null) {
+                game.setStatus("finished");
+                game.setEndedAt(java.time.LocalDateTime.now());
+                gameService.saveGame(game);
+            }
         }
     }
     
